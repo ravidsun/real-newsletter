@@ -12,7 +12,8 @@ import reactor.core.publisher.Mono;
 import java.util.List;
 
 /**
- * Service for fetching articles from external news API.
+ * Service for fetching articles from the Finlight financial news API
+ * (https://finlight.me).
  */
 @Service
 public class ExternalNewsClient {
@@ -21,8 +22,8 @@ public class ExternalNewsClient {
 
     private final WebClient webClient;
 
-    @Value("${external.news.api.url:https://newsapi.org/v2/top-headlines}")
-    private String trendingApiUrl;
+    @Value("${external.news.api.url:https://api.finlight.me/v2/articles}")
+    private String articlesApiUrl;
 
     @Value("${external.news.api.key:}")
     private String apiKey;
@@ -32,29 +33,53 @@ public class ExternalNewsClient {
     }
 
     /**
-     * Fetches trending articles from the external API.
-     * @return Flux of ArticleDto
+     * Fetches the latest articles from the Finlight API.
+     *
+     * <p>Query parameters:
+     * <ul>
+     *   <li>{@code apiKey}  – Finlight API key</li>
+     *   <li>{@code language} – filter to English articles</li>
+     *   <li>{@code pageSize} – number of articles per request (max 100)</li>
+     * </ul>
+     *
+     * @return Flux of {@link ArticleDto}
      */
     public Flux<ArticleDto> fetchTrendingArticles() {
         return webClient.get()
-            .uri(trendingApiUrl + "?apiKey=" + apiKey + "&country=us")
+            .uri(articlesApiUrl + "?apiKey=" + apiKey + "&language=en&pageSize=20")
             .retrieve()
             .onStatus(status -> !status.is2xxSuccessful(), response -> {
-                logger.error("Error fetching articles: {}", response.statusCode());
-                return Mono.error(new RuntimeException("Failed to fetch articles"));
+                logger.error("Error fetching articles from Finlight: {}", response.statusCode());
+                return Mono.error(new RuntimeException("Failed to fetch articles from Finlight"));
             })
-            .bodyToMono(NewsApiResponse.class)
+            .bodyToMono(FinlightResponse.class)
             .flatMapMany(response -> Flux.fromIterable(response.articles()))
-            .map(article -> new ArticleDto(null, article.url(), article.title(), article.content(), null, null, null));
+            .map(article -> new ArticleDto(
+                    null,
+                    article.link(),                                    // Finlight uses "link" for the source URL
+                    article.title(),
+                    article.content() != null ? article.content()      // full body when available
+                                              : article.description(), // fall back to short description
+                    null,
+                    null,
+                    null));
     }
 
     /**
-     * Wrapper for NewsAPI response.
+     * Top-level Finlight API response wrapper.
      */
-    public record NewsApiResponse(List<Article> articles) {}
+    public record FinlightResponse(List<FinlightArticle> articles) {}
 
     /**
-     * Represents an article from NewsAPI.
+     * Represents a single article returned by the Finlight API.
+     * Finlight uses {@code link} for the canonical URL, {@code description}
+     * for a short lead paragraph, and {@code content} for the full body (may be null).
      */
-    public record Article(String url, String title, String content) {}
+    public record FinlightArticle(
+            String title,
+            String link,
+            String description,
+            String content,
+            String publishedAt
+    ) {}
 }

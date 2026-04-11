@@ -1,6 +1,6 @@
 # Real Newsletter
 
-An AI-powered news aggregation and delivery platform built with **Spring Boot 3**, **Spring AI (OpenAI GPT-4)**, and **PostgreSQL (Supabase)**. It periodically fetches trending articles from NewsAPI, enriches them with AI-generated summaries and tags, persists them, and delivers them to clients via a paginated REST API and a real-time Server-Sent Events (SSE) stream.
+An AI-powered news aggregation and delivery platform built with **Spring Boot 3**, **Spring AI (OpenAI GPT-4)**, and **PostgreSQL (Supabase)**. It periodically fetches the latest financial articles from the [Finlight API](https://finlight.me), enriches them with AI-generated summaries and tags, persists them, and delivers them to clients via a paginated REST API and a real-time Server-Sent Events (SSE) stream.
 
 ---
 
@@ -29,7 +29,7 @@ An AI-powered news aggregation and delivery platform built with **Spring Boot 3*
 
 | Feature | Description |
 |---|---|
-| **News Ingestion** | Scheduled job fetches US trending headlines from [NewsAPI](https://newsapi.org) every 10 minutes. Duplicate articles (by URL) are automatically skipped. |
+| **News Ingestion** | Scheduled job fetches the latest English financial headlines from the [Finlight API](https://finlight.me) (`https://api.finlight.me/v2/articles`) every 10 minutes. Duplicate articles (by URL) are automatically skipped. |
 | **AI Enrichment** | Each new article is sent to OpenAI GPT-4 via Spring AI to generate a plain-text summary and a set of comma-separated tags. |
 | **Paginated REST API** | `GET /api/v1/articles` returns stored articles as a paginated JSON response, sorted by newest first. |
 | **Real-Time SSE Stream** | `GET /api/v1/articles/stream` opens a persistent Server-Sent Events connection. Every new article saved triggers a `new-article` event pushed to all connected clients instantly. |
@@ -96,7 +96,7 @@ An AI-powered news aggregation and delivery platform built with **Spring Boot 3*
 - **Maven 3.9+** (or use the Maven wrapper `./mvnw`)
 - **Docker & Docker Compose** (optional, for containerised run)
 - A **[Supabase](https://supabase.com)** project (free tier works) — provides the PostgreSQL database
-- A **[NewsAPI](https://newsapi.org)** API key (free tier: 100 req/day)
+- A **[Finlight](https://finlight.me)** API key — financial news feed (free tier available)
 - An **[OpenAI](https://platform.openai.com)** API key (for GPT-4 AI enrichment)
 
 ---
@@ -111,7 +111,7 @@ SUPABASE_JDBC_URL=jdbc:postgresql://db.<project-ref>.supabase.co:6543/postgres?s
 SUPABASE_DB_USER=postgres
 SUPABASE_DB_PASSWORD=your-supabase-password
 
-NEWS_API_KEY=your-newsapi-key
+FINLIGHT_API_KEY=your-finlight-api-key
 
 OPENAI_API_KEY=sk-...
 ```
@@ -125,8 +125,8 @@ OPENAI_API_KEY=sk-...
 | `spring.datasource.password` | *(required)* `$SUPABASE_DB_PASSWORD` | Database password |
 | `spring.ai.openai.api-key` | `$OPENAI_API_KEY` | OpenAI API key for GPT-4 enrichment |
 | `spring.ai.openai.chat.options.model` | `gpt-4` | OpenAI model name |
-| `external.news.api.url` | `https://newsapi.org/v2/top-headlines` | NewsAPI base URL |
-| `external.news.api.key` | `$NEWS_API_KEY` | NewsAPI key |
+| `external.news.api.url` | `https://api.finlight.me/v2/articles` | Finlight articles endpoint |
+| `external.news.api.key` | `$FINLIGHT_API_KEY` | Finlight API key |
 | `ingestion.interval.ms` | `600000` (10 min) | How often the ingestion job runs (milliseconds) |
 
 ---
@@ -144,7 +144,7 @@ cd real-newsletter
 export SUPABASE_JDBC_URL="jdbc:postgresql://..."
 export SUPABASE_DB_USER="postgres"
 export SUPABASE_DB_PASSWORD="your-password"
-export NEWS_API_KEY="your-newsapi-key"
+export FINLIGHT_API_KEY="your-finlight-key"
 export OPENAI_API_KEY="sk-..."
 
 # 3. Run the application

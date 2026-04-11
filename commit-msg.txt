@@ -1,0 +1,15 @@
+feat: switch news source from NewsAPI to Finlight
+
+- Update application.yml: external.news.api.url -> https://api.finlight.me/v2/articles
+- Rename env var NEWS_API_KEY -> FINLIGHT_API_KEY
+- Rewrite ExternalNewsClient to parse Finlight response shape:
+    * 'link' field (not 'url') mapped to article URL
+    * 'content' used when present, falls back to 'description'
+    * query params: language=en&pageSize=20
+    * internal records renamed: FinlightResponse / FinlightArticle
+- Update ExternalNewsClientTest with Finlight JSON shape and @ActiveProfiles("test")
+- Fix ArticleRepositoryTest: add @ActiveProfiles("test")
+- Update README: Finlight references, FINLIGHT_API_KEY, updated config table
+
+All 20 tests pass.
+

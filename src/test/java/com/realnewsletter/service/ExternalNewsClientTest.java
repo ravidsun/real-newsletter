@@ -1,6 +1,5 @@
 package com.realnewsletter.service;
 
-import com.realnewsletter.dto.ArticleDto;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
 import org.junit.jupiter.api.AfterEach;
@@ -8,15 +7,16 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
-import org.springframework.web.reactive.function.client.WebClient;
 import reactor.test.StepVerifier;
 
 import java.io.IOException;
 
 @SpringBootTest
+@ActiveProfiles("test")
 @TestPropertySource(properties = {
-    "external.news.api.url=http://localhost:8080/top-headlines",
+    "external.news.api.url=http://localhost:8089/v2/articles",
     "external.news.api.key=testkey"
 })
 class ExternalNewsClientTest {
@@ -29,7 +29,7 @@ class ExternalNewsClientTest {
     @BeforeEach
     void setUp() throws IOException {
         mockWebServer = new MockWebServer();
-        mockWebServer.start(8080);
+        mockWebServer.start(8089);
     }
 
     @AfterEach
@@ -38,12 +38,25 @@ class ExternalNewsClientTest {
     }
 
     @Test
-    void fetchTrendingArticles_shouldReturnArticles() {
+    void fetchTrendingArticles_shouldReturnArticlesFromFinlight() {
+        // Finlight response shape: articles[].{title, link, description, content, publishedAt}
         String mockResponse = """
             {
                 "articles": [
-                    {"url": "http://example.com/1", "title": "Title 1", "content": "Content 1"},
-                    {"url": "http://example.com/2", "title": "Title 2", "content": "Content 2"}
+                    {
+                        "title": "Title 1",
+                        "link": "http://example.com/1",
+                        "description": "Short description 1",
+                        "content": "Full content 1",
+                        "publishedAt": "2026-04-11T09:00:00Z"
+                    },
+                    {
+                        "title": "Title 2",
+                        "link": "http://example.com/2",
+                        "description": "Short description 2",
+                        "content": null,
+                        "publishedAt": "2026-04-11T09:05:00Z"
+                    }
                 ]
             }
             """;
@@ -53,13 +66,21 @@ class ExternalNewsClientTest {
             .addHeader("Content-Type", "application/json"));
 
         StepVerifier.create(externalNewsClient.fetchTrendingArticles())
-            .expectNextMatches(dto -> dto.url().equals("http://example.com/1") && dto.title().equals("Title 1"))
-            .expectNextMatches(dto -> dto.url().equals("http://example.com/2") && dto.title().equals("Title 2"))
+            // First article: content is present → used as article content
+            .expectNextMatches(dto ->
+                    dto.url().equals("http://example.com/1") &&
+                    dto.title().equals("Title 1") &&
+                    dto.content().equals("Full content 1"))
+            // Second article: content is null → falls back to description
+            .expectNextMatches(dto ->
+                    dto.url().equals("http://example.com/2") &&
+                    dto.title().equals("Title 2") &&
+                    dto.content().equals("Short description 2"))
             .verifyComplete();
     }
 
     @Test
-    void fetchTrendingArticles_shouldHandleError() {
+    void fetchTrendingArticles_shouldHandleApiError() {
         mockWebServer.enqueue(new MockResponse().setResponseCode(500));
 
         StepVerifier.create(externalNewsClient.fetchTrendingArticles())
