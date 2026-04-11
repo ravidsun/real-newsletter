@@ -16,8 +16,8 @@ import java.io.IOException;
 @SpringBootTest
 @ActiveProfiles("test")
 @TestPropertySource(properties = {
-    "external.news.api.url=http://localhost:8089/api/1/news",
-    "external.news.api.key=testkey"
+    "external.newsdata.url=http://localhost:8089/api/1/news",
+    "external.newsdata.key=testkey"
 })
 class ExternalNewsClientTest {
 
@@ -68,16 +68,14 @@ class ExternalNewsClientTest {
             .addHeader("Content-Type", "application/json"));
 
         StepVerifier.create(externalNewsClient.fetchTrendingArticles())
-            // First article: content present → used as body
-            .expectNextMatches(dto ->
-                    dto.link().equals("http://example.com/1") &&
-                    dto.title().equals("Title 1") &&
-                    dto.content().equals("Full content 1"))
-            // Second article: content null (free-tier restriction) → falls back to description
-            .expectNextMatches(dto ->
-                    dto.link().equals("http://example.com/2") &&
-                    dto.title().equals("Title 2") &&
-                    dto.content().equals("Short description 2"))
+            .expectNextMatches(a ->
+                    a.getLink().equals("http://example.com/1") &&
+                    a.getTitle().equals("Title 1") &&
+                    a.getContent().equals("Full content 1"))
+            .expectNextMatches(a ->
+                    a.getLink().equals("http://example.com/2") &&
+                    a.getTitle().equals("Title 2") &&
+                    a.getContent().equals("Short description 2"))
             .verifyComplete();
     }
 

@@ -1,6 +1,6 @@
 package com.realnewsletter.controller;
 
-import com.realnewsletter.model.Article;
+import com.realnewsletter.model.NewsdataArticle;
 import com.realnewsletter.repository.ArticleRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -52,9 +52,9 @@ class ArticleControllerTest {
     @Test
     void listArticles_shouldReturnPagedArticlesSortedByCreatedAtDesc() throws Exception {
         // Save 3 articles
-        articleRepository.save(new Article("http://article1.com", "First Article", "Content 1"));
-        articleRepository.save(new Article("http://article2.com", "Second Article", "Content 2"));
-        articleRepository.save(new Article("http://article3.com", "Third Article", "Content 3"));
+        articleRepository.save(new NewsdataArticle("http://article1.com", "First Article", "Content 1"));
+        articleRepository.save(new NewsdataArticle("http://article2.com", "Second Article", "Content 2"));
+        articleRepository.save(new NewsdataArticle("http://article3.com", "Third Article", "Content 3"));
 
         mockMvc.perform(get("/api/v1/articles")
                         .param("page", "0")
@@ -64,7 +64,7 @@ class ArticleControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content", hasSize(3)))
                 .andExpect(jsonPath("$.totalElements").value(3))
-                .andExpect(jsonPath("$.content[*].url", hasItems(
+                .andExpect(jsonPath("$.content[*].link", hasItems(
                         "http://article1.com",
                         "http://article2.com",
                         "http://article3.com")));
@@ -74,7 +74,7 @@ class ArticleControllerTest {
     void listArticles_shouldRespectPaginationParameters() throws Exception {
         // Save 5 articles
         for (int i = 1; i <= 5; i++) {
-            articleRepository.save(new Article("http://article" + i + ".com", "Article " + i, "Content " + i));
+            articleRepository.save(new NewsdataArticle("http://article" + i + ".com", "Article " + i, "Content " + i));
         }
 
         mockMvc.perform(get("/api/v1/articles")
@@ -91,7 +91,7 @@ class ArticleControllerTest {
     void listArticles_shouldReturnSecondPage() throws Exception {
         // Save 4 articles
         for (int i = 1; i <= 4; i++) {
-            articleRepository.save(new Article("http://p" + i + ".com", "Title " + i, "Content " + i));
+            articleRepository.save(new NewsdataArticle("http://p" + i + ".com", "Title " + i, "Content " + i));
         }
 
         mockMvc.perform(get("/api/v1/articles")

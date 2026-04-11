@@ -1,7 +1,7 @@
 package com.realnewsletter.service;
 
-import com.realnewsletter.dto.ArticleDto;
-import com.realnewsletter.model.Article;
+import com.realnewsletter.model.NewsdataArticle;
+import com.realnewsletter.model.NewsApiArticle;
 import com.realnewsletter.repository.ArticleRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -9,8 +9,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.ActiveProfiles;
 import reactor.core.publisher.Flux;
-
-import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
@@ -29,27 +27,28 @@ class IngestionServiceTest {
     private ExternalNewsClient externalNewsClient;
 
     @MockitoBean
+    private NewsApiClient newsApiClient;
+
+    @MockitoBean
     private AiEnhancementService aiEnhancementService;
 
     @Test
     void ingestScheduled_shouldSaveNewArticlesAndSkipDuplicates() {
         // Pre-save one article to test deduplication
-        Article existingArticle = new Article("http://duplicate.com", "Duplicate Title", "Duplicate Content");
+        NewsdataArticle existingArticle = new NewsdataArticle("http://duplicate.com", "Duplicate Title", "Duplicate Content");
         articleRepository.save(existingArticle);
 
-        // Mock ArticleDtos with all required fields (minimal setup)
-        ArticleDto dto1 = new ArticleDto(null, "id1", "http://new1.com", "New Title 1", null, "New Content 1", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, false, null);
-        ArticleDto dto2 = new ArticleDto(null, "id2", "http://new2.com", "New Title 2", null, "New Content 2", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, false, null);
-        ArticleDto dupe = new ArticleDto(null, "dup", "http://duplicate.com", "Duplicate Title", null, "Duplicate Content", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, false, null);
+        NewsdataArticle dto1 = new NewsdataArticle("http://new1.com", "New Title 1", "New Content 1");
+        NewsdataArticle dto2 = new NewsdataArticle("http://new2.com", "New Title 2", "New Content 2");
+        NewsdataArticle dupe = new NewsdataArticle("http://duplicate.com", "Duplicate Title", "Duplicate Content");
 
-        when(externalNewsClient.fetchTrendingArticles()).thenReturn(Flux.fromIterable(List.of(dto1, dto2, dupe)));
+        when(externalNewsClient.fetchTrendingArticles()).thenReturn(Flux.just(dto1, dto2, dupe));
+        when(newsApiClient.fetchTopHeadlines()).thenReturn(Flux.empty());
 
         ingestionService.ingestScheduled();
 
-        // Verify new articles are saved
         assertThat(articleRepository.existsByLink("http://new1.com")).isTrue();
         assertThat(articleRepository.existsByLink("http://new2.com")).isTrue();
-        // Duplicate should not be saved again
         assertThat(articleRepository.findAll()).hasSize(3); // 1 existing + 2 new
     }
 }

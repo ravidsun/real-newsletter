@@ -1,6 +1,6 @@
 package com.realnewsletter.repository;
 
-import com.realnewsletter.model.Article;
+import com.realnewsletter.model.NewsdataArticle;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
@@ -17,7 +17,7 @@ class ArticleRepositoryTest {
 
     @Test
     void existsByLink_shouldReturnTrueWhenArticleExists() {
-        Article article = new Article("http://example.com", "Title", "Content");
+        NewsdataArticle article = new NewsdataArticle("http://example.com", "Title", "Content");
         articleRepository.save(article);
 
         boolean exists = articleRepository.existsByLink("http://example.com");

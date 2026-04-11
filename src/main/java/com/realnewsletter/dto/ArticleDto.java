@@ -1,113 +1,94 @@
 package com.realnewsletter.dto;
 
 import com.realnewsletter.model.Article;
+import com.realnewsletter.model.NewsdataArticle;
+
 import java.time.Instant;
 import java.util.UUID;
 
 /**
- * DTO representing an article from Newsdata.io API.
+ * Unified read DTO for articles from any news source.
+ * Source-specific fields are null when not applicable.
  */
 public record ArticleDto(
     UUID id,
-    String articleId,
+    String sourceType,
     String link,
     String title,
     String description,
     String content,
-    String keywords,
     String creator,
+    String sourceId,
+    String sourceName,
+    String imageUrl,
+    Instant pubDate,
+    String aiSummary,
+    String aiTag,
+    Instant createdAt,
+    // Newsdata-specific (null for NewsAPI articles)
+    String articleId,
+    String keywords,
     String language,
     String country,
     String category,
     String datatype,
-    Instant pubDate,
     String pubDateTz,
     Instant fetchedAt,
-    String imageUrl,
     String videoUrl,
-    String sourceId,
-    String sourceName,
     Integer sourcePriority,
     String sourceUrl,
     String sourceIcon,
     String sentiment,
     String sentimentStats,
-    String aiTag,
     String aiRegion,
     String aiOrg,
-    String aiSummary,
-    Boolean duplicate,
-    Instant createdAt
+    Boolean duplicate
 ) {
 
     /**
-     * Converts an Article entity to ArticleDto.
+     * Converts any Article subtype to ArticleDto.
+     * Newsdata-specific fields are populated only for {@link NewsdataArticle}.
      */
     public static ArticleDto fromEntity(Article article) {
-        return new ArticleDto(
-            article.getId(),
-            article.getArticleId(),
-            article.getLink(),
-            article.getTitle(),
-            article.getDescription(),
-            article.getContent(),
-            article.getKeywords(),
-            article.getCreator(),
-            article.getLanguage(),
-            article.getCountry(),
-            article.getCategory(),
-            article.getDatatype(),
-            article.getPubDate(),
-            article.getPubDateTz(),
-            article.getFetchedAt(),
-            article.getImageUrl(),
-            article.getVideoUrl(),
-            article.getSourceId(),
-            article.getSourceName(),
-            article.getSourcePriority(),
-            article.getSourceUrl(),
-            article.getSourceIcon(),
-            article.getSentiment(),
-            article.getSentimentStats(),
-            article.getAiTag(),
-            article.getAiRegion(),
-            article.getAiOrg(),
-            article.getAiSummary(),
-            article.getDuplicate(),
-            article.getCreatedAt()
-        );
-    }
+        String articleId = null, keywords = null, language = null, country = null,
+               category = null, datatype = null, pubDateTz = null, videoUrl = null,
+               sourceUrl = null, sourceIcon = null, sentiment = null,
+               sentimentStats = null, aiRegion = null, aiOrg = null;
+        Integer sourcePriority = null;
+        Instant fetchedAt = null;
+        Boolean duplicate = null;
 
-    /**
-     * Converts ArticleDto to Article entity.
-     */
-    public static Article toEntity(ArticleDto dto) {
-        Article article = new Article(dto.link(), dto.title(), dto.content());
-        article.setArticleId(dto.articleId());
-        article.setDescription(dto.description());
-        article.setKeywords(dto.keywords());
-        article.setCreator(dto.creator());
-        article.setLanguage(dto.language());
-        article.setCountry(dto.country());
-        article.setCategory(dto.category());
-        article.setDatatype(dto.datatype());
-        article.setPubDate(dto.pubDate());
-        article.setPubDateTz(dto.pubDateTz());
-        article.setFetchedAt(dto.fetchedAt());
-        article.setImageUrl(dto.imageUrl());
-        article.setVideoUrl(dto.videoUrl());
-        article.setSourceId(dto.sourceId());
-        article.setSourceName(dto.sourceName());
-        article.setSourcePriority(dto.sourcePriority());
-        article.setSourceUrl(dto.sourceUrl());
-        article.setSourceIcon(dto.sourceIcon());
-        article.setSentiment(dto.sentiment());
-        article.setSentimentStats(dto.sentimentStats());
-        article.setAiTag(dto.aiTag());
-        article.setAiRegion(dto.aiRegion());
-        article.setAiOrg(dto.aiOrg());
-        article.setAiSummary(dto.aiSummary());
-        article.setDuplicate(dto.duplicate());
-        return article;
+        if (article instanceof NewsdataArticle nd) {
+            articleId      = nd.getArticleId();
+            keywords       = nd.getKeywords();
+            language       = nd.getLanguage();
+            country        = nd.getCountry();
+            category       = nd.getCategory();
+            datatype       = nd.getDatatype();
+            pubDateTz      = nd.getPubDateTz();
+            fetchedAt      = nd.getFetchedAt();
+            videoUrl       = nd.getVideoUrl();
+            sourcePriority = nd.getSourcePriority();
+            sourceUrl      = nd.getSourceUrl();
+            sourceIcon     = nd.getSourceIcon();
+            sentiment      = nd.getSentiment();
+            sentimentStats = nd.getSentimentStats();
+            aiRegion       = nd.getAiRegion();
+            aiOrg          = nd.getAiOrg();
+            duplicate      = nd.getDuplicate();
+        }
+
+        // Infer source type from discriminator value via class name
+        String sourceType = article instanceof NewsdataArticle ? "NEWSDATA" : "NEWSAPI";
+
+        return new ArticleDto(
+            article.getId(), sourceType,
+            article.getLink(), article.getTitle(), article.getDescription(), article.getContent(),
+            article.getCreator(), article.getSourceId(), article.getSourceName(), article.getImageUrl(),
+            article.getPubDate(), article.getAiSummary(), article.getAiTag(), article.getCreatedAt(),
+            articleId, keywords, language, country, category, datatype,
+            pubDateTz, fetchedAt, videoUrl, sourcePriority, sourceUrl, sourceIcon,
+            sentiment, sentimentStats, aiRegion, aiOrg, duplicate
+        );
     }
 }

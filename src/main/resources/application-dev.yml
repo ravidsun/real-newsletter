@@ -9,8 +9,9 @@ spring:
       api-key: ${GROQ_API_KEY:test-key-not-real}
 
 external:
-  news:
-    api:
-      key: ${NEWSDATA_API_KEY:test-key}
+  newsdata:
+    key: ${NEWSDATA_API_KEY:test-key}
+  newsapi:
+    key: ${NEWSAPI_KEY:}
 
 

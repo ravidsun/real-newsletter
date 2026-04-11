@@ -1,6 +1,7 @@
 package com.realnewsletter.service;
 
 import com.realnewsletter.model.Article;
+import com.realnewsletter.model.NewsdataArticle;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -33,7 +34,7 @@ class AiEnhancementServiceTest {
 
     @Test
     void enrichArticle_shouldSetAiSummaryAndTagsWhenResponseContainsTagsSection() {
-        Article article = new Article("http://example.com", "Title", "Content about AI");
+        Article article = new NewsdataArticle("http://example.com", "Title", "Content about AI");
         String response = "This article discusses artificial intelligence and its impact.\n\nTags: ai, technology, innovation";
 
         when(chatClient.prompt()
@@ -52,7 +53,7 @@ class AiEnhancementServiceTest {
 
     @Test
     void enrichArticle_shouldSetFullResponseAsSummaryWhenNoTagsSection() {
-        Article article = new Article("http://example.com", "Title", "Some content");
+        Article article = new NewsdataArticle("http://example.com", "Title", "Some content");
         String response = "A brief summary without a tags section.";
 
         when(chatClient.prompt()
@@ -70,7 +71,7 @@ class AiEnhancementServiceTest {
 
     @Test
     void enrichArticle_shouldHandleNullOutputGracefully() {
-        Article article = new Article("http://example.com", "Title", "Content");
+        Article article = new NewsdataArticle("http://example.com", "Title", "Content");
 
         when(chatClient.prompt()
                 .system(anyString())

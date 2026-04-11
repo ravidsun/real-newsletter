@@ -36,10 +36,12 @@ spring:
           model: llama-3.1-8b-instant
 
 external:
-  news:
-    api:
-      url: ${NEWSDATA_API_URL:https://newsdata.io/api/1/news}
-      key: ${NEWSDATA_API_KEY:}
+  newsdata:
+    url: ${NEWSDATA_API_URL:https://newsdata.io/api/1/news}
+    key: ${NEWSDATA_API_KEY:}
+  newsapi:
+    url: https://newsapi.org/v2/top-headlines
+    key: ${NEWSAPI_KEY:}
 
 ingestion:
   interval:
