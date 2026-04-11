@@ -19,6 +19,9 @@ services:
       SUPABASE_JDBC_URL: ${SUPABASE_JDBC_URL}
       SUPABASE_DB_USER: ${SUPABASE_DB_USER}
       SUPABASE_DB_PASSWORD: ${SUPABASE_DB_PASSWORD}
+      EXTERNAL_NEWS_API_URL: ${EXTERNAL_NEWS_API_URL:-https://newsapi.org/v2/top-headlines}
+      EXTERNAL_NEWS_API_KEY: ${EXTERNAL_NEWS_API_KEY:-}
+      INGESTION_INTERVAL_MS: ${INGESTION_INTERVAL_MS:-600000}
     env_file:
       - .env
     restart: unless-stopped
