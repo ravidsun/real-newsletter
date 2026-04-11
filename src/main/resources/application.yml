@@ -29,10 +29,11 @@ spring:
 
   ai:
     openai:
-      api-key: ${OPENAI_API_KEY:}
+      api-key: ${GROQ_API_KEY:}
+      base-url: https://api.groq.com/openai/
       chat:
         options:
-          model: gpt-3.5-turbo
+          model: llama-3.1-8b-instant
 
 external:
   news:
