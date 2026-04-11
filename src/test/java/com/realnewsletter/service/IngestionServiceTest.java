@@ -38,9 +38,9 @@ class IngestionServiceTest {
         articleRepository.save(existingArticle);
 
         List<ArticleDto> mockArticles = List.of(
-            new ArticleDto("http://new1.com", "New Title 1", "New Content 1"),
-            new ArticleDto("http://new2.com", "New Title 2", "New Content 2"),
-            new ArticleDto("http://duplicate.com", "Duplicate Title", "Duplicate Content") // duplicate
+            new ArticleDto(null, "http://new1.com", "New Title 1", "New Content 1", null, null, null),
+            new ArticleDto(null, "http://new2.com", "New Title 2", "New Content 2", null, null, null),
+            new ArticleDto(null, "http://duplicate.com", "Duplicate Title", "Duplicate Content", null, null, null) // duplicate
         );
         when(externalNewsClient.fetchTrendingArticles()).thenReturn(Flux.fromIterable(mockArticles));
 
