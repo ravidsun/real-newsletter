@@ -25,6 +25,13 @@ spring:
   flyway:
     enabled: true
 
+  ai:
+    openai:
+      api-key: ${OPENAI_API_KEY:}
+      chat:
+        options:
+          model: gpt-4
+
 external:
   news:
     api:

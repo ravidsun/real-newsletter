@@ -47,7 +47,10 @@ class ExternalNewsClientTest {
                 ]
             }
             """;
-        mockWebServer.enqueue(new MockResponse().setBody(mockResponse).setResponseCode(200));
+        mockWebServer.enqueue(new MockResponse()
+            .setBody(mockResponse)
+            .setResponseCode(200)
+            .addHeader("Content-Type", "application/json"));
 
         StepVerifier.create(externalNewsClient.fetchTrendingArticles())
             .expectNextMatches(dto -> dto.url().equals("http://example.com/1") && dto.title().equals("Title 1"))

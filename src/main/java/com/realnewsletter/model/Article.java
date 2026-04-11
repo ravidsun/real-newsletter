@@ -15,23 +15,26 @@ public class Article {
     @GeneratedValue
     private UUID id;
 
-    @Column(unique = true, nullable = false)
+    @Column(unique = true, nullable = false, columnDefinition = "TEXT")
     private String url;
 
+    @Column(columnDefinition = "TEXT")
     private String title;
 
     @Column(columnDefinition = "TEXT")
     private String content;
+
+    @Column(name = "ai_summary", columnDefinition = "TEXT")
+    private String aiSummary;
+
+    @Column(columnDefinition = "TEXT")
+    private String tags;
 
     @Column(name = "created_at", updatable = false, insertable = false)
     private Instant createdAt;
 
     @Column(name = "updated_at", insertable = false)
     private Instant updatedAt;
-
-    // For future issues
-    private String aiSummary;
-    private String tags;
 
     // Constructors, getters, setters
     public Article() {}
@@ -55,15 +58,15 @@ public class Article {
     public String getContent() { return content; }
     public void setContent(String content) { this.content = content; }
 
-    public Instant getCreatedAt() { return createdAt; }
-    public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
-
-    public Instant getUpdatedAt() { return updatedAt; }
-    public void setUpdatedAt(Instant updatedAt) { this.updatedAt = updatedAt; }
-
     public String getAiSummary() { return aiSummary; }
     public void setAiSummary(String aiSummary) { this.aiSummary = aiSummary; }
 
     public String getTags() { return tags; }
     public void setTags(String tags) { this.tags = tags; }
+
+    public Instant getCreatedAt() { return createdAt; }
+    public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
+
+    public Instant getUpdatedAt() { return updatedAt; }
+    public void setUpdatedAt(Instant updatedAt) { this.updatedAt = updatedAt; }
 }

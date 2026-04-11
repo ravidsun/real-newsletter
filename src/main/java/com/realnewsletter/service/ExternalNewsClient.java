@@ -10,7 +10,6 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
-import java.util.UUID;
 
 /**
  * Service for fetching articles from external news API.
@@ -46,7 +45,7 @@ public class ExternalNewsClient {
             })
             .bodyToMono(NewsApiResponse.class)
             .flatMapMany(response -> Flux.fromIterable(response.articles()))
-            .map(article -> new ArticleDto(UUID.randomUUID(), article.url(), article.title(), article.content()));
+            .map(article -> new ArticleDto(article.url(), article.title(), article.content()));
     }
 
     /**
