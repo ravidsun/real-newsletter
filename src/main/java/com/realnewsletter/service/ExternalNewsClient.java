@@ -12,8 +12,8 @@ import reactor.core.publisher.Mono;
 import java.util.List;
 
 /**
- * Service for fetching articles from the Finlight financial news API
- * (https://finlight.me).
+ * Service for fetching articles from the Newsdata.io API
+ * (https://newsdata.io).
  */
 @Service
 public class ExternalNewsClient {
@@ -22,7 +22,7 @@ public class ExternalNewsClient {
 
     private final WebClient webClient;
 
-    @Value("${external.news.api.url:https://api.finlight.me/v2/articles}")
+    @Value("${external.news.api.url:https://newsdata.io/api/1/news}")
     private String articlesApiUrl;
 
     @Value("${external.news.api.key:}")
@@ -33,53 +33,59 @@ public class ExternalNewsClient {
     }
 
     /**
-     * Fetches the latest articles from the Finlight API.
+     * Fetches the latest articles from the Newsdata.io API.
      *
      * <p>Query parameters:
      * <ul>
-     *   <li>{@code apiKey}  – Finlight API key</li>
+     *   <li>{@code apikey}   – Newsdata.io API key (lowercase 'k')</li>
      *   <li>{@code language} – filter to English articles</li>
-     *   <li>{@code pageSize} – number of articles per request (max 100)</li>
+     *   <li>{@code country}  – filter to US sources</li>
      * </ul>
      *
      * @return Flux of {@link ArticleDto}
      */
     public Flux<ArticleDto> fetchTrendingArticles() {
         return webClient.get()
-            .uri(articlesApiUrl + "?apiKey=" + apiKey + "&language=en&pageSize=20")
+            .uri(articlesApiUrl + "?apikey=" + apiKey + "&language=en&country=us")
             .retrieve()
             .onStatus(status -> !status.is2xxSuccessful(), response -> {
-                logger.error("Error fetching articles from Finlight: {}", response.statusCode());
-                return Mono.error(new RuntimeException("Failed to fetch articles from Finlight"));
+                logger.error("Error fetching articles from Newsdata.io: {}", response.statusCode());
+                return Mono.error(new RuntimeException("Failed to fetch articles from Newsdata.io"));
             })
-            .bodyToMono(FinlightResponse.class)
-            .flatMapMany(response -> Flux.fromIterable(response.articles()))
+            .bodyToMono(NewsdataResponse.class)
+            .flatMapMany(response -> Flux.fromIterable(response.results()))
             .map(article -> new ArticleDto(
                     null,
-                    article.link(),                                    // Finlight uses "link" for the source URL
+                    article.link(),                                      // canonical source URL
                     article.title(),
-                    article.content() != null ? article.content()      // full body when available
-                                              : article.description(), // fall back to short description
+                    article.content() != null ? article.content()        // full body when available
+                                              : article.description(),   // fall back to lead description
                     null,
                     null,
                     null));
     }
 
     /**
-     * Top-level Finlight API response wrapper.
+     * Top-level Newsdata.io API response wrapper.
+     * The {@code results} array contains the articles.
      */
-    public record FinlightResponse(List<FinlightArticle> articles) {}
+    public record NewsdataResponse(String status, List<NewsdataArticle> results) {}
 
     /**
-     * Represents a single article returned by the Finlight API.
-     * Finlight uses {@code link} for the canonical URL, {@code description}
-     * for a short lead paragraph, and {@code content} for the full body (may be null).
+     * Represents a single article returned by the Newsdata.io API.
+     *
+     * <ul>
+     *   <li>{@code link}        – canonical source URL</li>
+     *   <li>{@code description} – short lead paragraph (always present)</li>
+     *   <li>{@code content}     – full article body (may be {@code null} on the free tier)</li>
+     *   <li>{@code pubDate}     – publication date string, e.g. {@code "2026-04-11 09:00:00"}</li>
+     * </ul>
      */
-    public record FinlightArticle(
+    public record NewsdataArticle(
             String title,
             String link,
             String description,
             String content,
-            String publishedAt
+            String pubDate
     ) {}
 }

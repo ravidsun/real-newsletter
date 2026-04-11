@@ -35,8 +35,8 @@ spring:
 external:
   news:
     api:
-      url: https://api.finlight.me/v2/articles
-      key: ${FINLIGHT_API_KEY:}
+      url: https://newsdata.io/api/1/news
+      key: ${NEWSDATA_API_KEY:}
 
 ingestion:
   interval:
