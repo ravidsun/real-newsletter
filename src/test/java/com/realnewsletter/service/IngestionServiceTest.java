@@ -1,35 +1,53 @@
 package com.realnewsletter.service;
 
 import com.realnewsletter.dto.ArticleDto;
+import com.realnewsletter.model.Article;
+import com.realnewsletter.repository.ArticleRepository;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.boot.test.mockito.MockitoBean;
+import org.springframework.test.context.ActiveProfiles;
 import reactor.core.publisher.Flux;
 
 import java.util.List;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.when;
+
 @SpringBootTest
+@ActiveProfiles("test")
 class IngestionServiceTest {
 
     @Autowired
     private IngestionService ingestionService;
 
-    @MockBean
+    @Autowired
+    private ArticleRepository articleRepository;
+
+    @MockitoBean
     private ExternalNewsClient externalNewsClient;
 
     @Test
-    void ingestScheduled_shouldLogFetchedArticles() {
+    void ingestScheduled_shouldSaveNewArticlesAndSkipDuplicates() {
+        // Pre-save one article to test deduplication
+        Article existingArticle = new Article("http://duplicate.com", "Duplicate Title", "Duplicate Content");
+        articleRepository.save(existingArticle);
+
         List<ArticleDto> mockArticles = List.of(
-            new ArticleDto(UUID.randomUUID(), "url1", "title1", "content1"),
-            new ArticleDto(UUID.randomUUID(), "url2", "title2", "content2")
+            new ArticleDto(UUID.randomUUID(), "http://new1.com", "New Title 1", "New Content 1"),
+            new ArticleDto(UUID.randomUUID(), "http://new2.com", "New Title 2", "New Content 2"),
+            new ArticleDto(UUID.randomUUID(), "http://duplicate.com", "Duplicate Title", "Duplicate Content") // duplicate
         );
-        Mockito.when(externalNewsClient.fetchTrendingArticles()).thenReturn(Flux.fromIterable(mockArticles));
+        when(externalNewsClient.fetchTrendingArticles()).thenReturn(Flux.fromIterable(mockArticles));
 
         ingestionService.ingestScheduled();
 
-        Mockito.verify(externalNewsClient).fetchTrendingArticles();
+        // Verify new articles are saved
+        assertThat(articleRepository.existsByUrl("http://new1.com")).isTrue();
+        assertThat(articleRepository.existsByUrl("http://new2.com")).isTrue();
+        // Duplicate should not be saved again
+        assertThat(articleRepository.findAll()).hasSize(3); // 1 existing + 2 new
     }
 }
