@@ -2,9 +2,11 @@ package com.realnewsletter.service;
 
 import com.realnewsletter.dto.ArticleDto;
 import com.realnewsletter.model.Article;
+import com.realnewsletter.model.NewArticleEvent;
 import com.realnewsletter.repository.ArticleRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -21,13 +23,16 @@ public class IngestionService {
     private final ExternalNewsClient externalNewsClient;
     private final ArticleRepository articleRepository;
     private final AiEnhancementService aiEnhancementService;
+    private final ApplicationEventPublisher eventPublisher;
 
     public IngestionService(ExternalNewsClient externalNewsClient,
                             ArticleRepository articleRepository,
-                            AiEnhancementService aiEnhancementService) {
+                            AiEnhancementService aiEnhancementService,
+                            ApplicationEventPublisher eventPublisher) {
         this.externalNewsClient = externalNewsClient;
         this.articleRepository = articleRepository;
         this.aiEnhancementService = aiEnhancementService;
+        this.eventPublisher = eventPublisher;
     }
 
     /**
@@ -58,7 +63,8 @@ public class IngestionService {
                 } catch (Exception e) {
                     logger.warn("AI enrichment failed for article {}, saving without AI data", dto.url(), e);
                 }
-                articleRepository.save(article);
+                Article saved_article = articleRepository.save(article);
+                eventPublisher.publishEvent(new NewArticleEvent(saved_article));
                 saved++;
                 logger.debug("Saved new article: {}", dto.url());
             }

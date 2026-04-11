@@ -45,7 +45,7 @@ public class ExternalNewsClient {
             })
             .bodyToMono(NewsApiResponse.class)
             .flatMapMany(response -> Flux.fromIterable(response.articles()))
-            .map(article -> new ArticleDto(article.url(), article.title(), article.content()));
+            .map(article -> new ArticleDto(null, article.url(), article.title(), article.content(), null, null, null));
     }
 
     /**
