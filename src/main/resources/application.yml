@@ -35,7 +35,7 @@ spring:
 external:
   news:
     api:
-      url: https://newsdata.io/api/1/news
+      url: ${NEWSDATA_API_URL:https://newsdata.io/api/1/news}
       key: ${NEWSDATA_API_KEY:}
 
 ingestion:

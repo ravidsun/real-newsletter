@@ -111,6 +111,7 @@ SUPABASE_JDBC_URL=jdbc:postgresql://db.<project-ref>.supabase.co:6543/postgres?s
 SUPABASE_DB_USER=postgres
 SUPABASE_DB_PASSWORD=your-supabase-password
 
+NEWSDATA_API_URL=https://newsdata.io/api/1/news
 NEWSDATA_API_KEY=pub_your-newsdata-key
 
 OPENAI_API_KEY=sk-...
@@ -125,7 +126,7 @@ OPENAI_API_KEY=sk-...
 | `spring.datasource.password` | *(required)* `$SUPABASE_DB_PASSWORD` | Database password |
 | `spring.ai.openai.api-key` | `$OPENAI_API_KEY` | OpenAI API key for GPT-4 enrichment |
 | `spring.ai.openai.chat.options.model` | `gpt-4` | OpenAI model name |
-| `external.news.api.url` | `https://newsdata.io/api/1/news` | Newsdata.io articles endpoint |
+| `external.news.api.url` | `$NEWSDATA_API_URL` (default: `https://newsdata.io/api/1/news`) | Newsdata.io articles endpoint |
 | `external.news.api.key` | `$NEWSDATA_API_KEY` | Newsdata.io API key |
 | `ingestion.interval.ms` | `600000` (10 min) | How often the ingestion job runs (milliseconds) |
 
@@ -144,6 +145,7 @@ cd real-newsletter
 export SUPABASE_JDBC_URL="jdbc:postgresql://..."
 export SUPABASE_DB_USER="postgres"
 export SUPABASE_DB_PASSWORD="your-password"
+export NEWSDATA_API_URL="https://newsdata.io/api/1/news"
 export NEWSDATA_API_KEY="pub_your-newsdata-key"
 export OPENAI_API_KEY="sk-..."
 
