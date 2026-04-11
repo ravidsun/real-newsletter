@@ -12,6 +12,7 @@ import java.util.UUID;
  */
 public record ArticleDto(
     UUID id,
+    Long seq,
     String sourceType,
     String link,
     String title,
@@ -82,7 +83,7 @@ public record ArticleDto(
         String sourceType = article instanceof NewsdataArticle ? "NEWSDATA" : "NEWSAPI";
 
         return new ArticleDto(
-            article.getId(), sourceType,
+            article.getId(), article.getSeq(), sourceType,
             article.getLink(), article.getTitle(), article.getDescription(), article.getContent(),
             article.getCreator(), article.getSourceId(), article.getSourceName(), article.getImageUrl(),
             article.getPubDate(), article.getAiSummary(), article.getAiTag(), article.getCreatedAt(),

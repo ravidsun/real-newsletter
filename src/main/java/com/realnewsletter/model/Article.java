@@ -1,6 +1,8 @@
 package com.realnewsletter.model;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.Generated;
+import org.hibernate.generator.EventType;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -8,6 +10,10 @@ import java.util.UUID;
  * Base JPA entity for articles. Uses SINGLE_TABLE inheritance so that
  * articles from different news sources share the same database table.
  * The {@code source_type} discriminator column identifies the source.
+ *
+ * <p>Note: Sealed classes are incompatible with Hibernate's proxy-based lazy loading.
+ * The class is declared {@code abstract} to prevent direct instantiation.
+ * Only {@link NewsdataArticle} and {@link NewsApiArticle} are concrete subtypes.</p>
  */
 @Entity
 @Table(name = "articles")
@@ -18,6 +24,11 @@ public abstract class Article {
     @Id
     @GeneratedValue
     private UUID id;
+
+    /** Auto-incrementing sequence number assigned by the database on insert. */
+    @Generated(event = EventType.INSERT)
+    @Column(name = "seq", insertable = false, updatable = false)
+    private Long seq;
 
     @Column(unique = true, nullable = false, columnDefinition = "TEXT")
     private String link;
@@ -70,6 +81,8 @@ public abstract class Article {
     // Getters and setters
     public UUID getId() { return id; }
     public void setId(UUID id) { this.id = id; }
+
+    public Long getSeq() { return seq; }
 
     public String getLink() { return link; }
     public void setLink(String link) { this.link = link; }

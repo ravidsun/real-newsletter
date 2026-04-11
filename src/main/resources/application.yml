@@ -40,7 +40,7 @@ external:
     url: ${NEWSDATA_API_URL:https://newsdata.io/api/1/news}
     key: ${NEWSDATA_API_KEY:}
   newsapi:
-    url: https://newsapi.org/v2/top-headlines
+    url: ${NEWSAPI_URL:https://newsapi.org/v2/top-headlines}
     key: ${NEWSAPI_KEY:}
 
 ingestion:
