@@ -1,0 +1,27 @@
+spring:
+  datasource:
+    # Supabase Transaction Pooler JDBC URL (port 6543).
+    # Append query params to disable prepared-statement caching, which is
+    # incompatible with PgBouncer transaction-mode pooling.
+    url: ${SUPABASE_JDBC_URL}
+    username: ${SUPABASE_DB_USER}
+    password: ${SUPABASE_DB_PASSWORD}
+    hikari:
+      connection-timeout: 30000
+      maximum-pool-size: 5
+      # Workaround for "prepared statement does not exist" errors with pgBouncer.
+      data-source-properties:
+        prepareThreshold: 0
+        preparedStatementCacheQueries: 0
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        default_schema: public
+
+  flyway:
+    enabled: true
+
