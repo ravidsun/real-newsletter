@@ -54,3 +54,15 @@ springdoc:
   api-docs:
     path: /v3/api-docs
 
+# ── Rate limiting (Resilience4j RateLimiter, per client IP) ──────────────────
+rate-limit:
+  enabled: true
+  # Maximum requests allowed per refresh window (Resilience4j: limitForPeriod)
+  limit-for-period: 100
+  # Length of one window in seconds (Resilience4j: limitRefreshPeriod)
+  limit-refresh-period-seconds: 60
+  # Milliseconds to wait for a permit; 0 = fail fast → HTTP 429 immediately
+  timeout-duration-millis: 0
+  # URL path patterns the limiter is applied to
+  path-patterns:
+    - /api/**

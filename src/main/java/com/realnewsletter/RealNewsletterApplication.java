@@ -3,6 +3,7 @@ package com.realnewsletter;
 import io.github.cdimascio.dotenv.Dotenv;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
@@ -10,9 +11,13 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  *
  * <p>{@code @EnableScheduling} activates Spring's task-scheduling infrastructure,
  * required by subsequent issues that implement periodic article-fetching jobs.</p>
+ *
+ * <p>{@code @ConfigurationPropertiesScan} registers all {@code @ConfigurationProperties}
+ * classes in the package (e.g. {@code RateLimitProperties}) as Spring beans.</p>
  */
 @SpringBootApplication
 @EnableScheduling
+@ConfigurationPropertiesScan
 public class RealNewsletterApplication {
 
     public static void main(String[] args) {
