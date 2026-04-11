@@ -46,3 +46,11 @@ external:
 ingestion:
   interval:
     ms: 600000
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: alpha
+  api-docs:
+    path: /v3/api-docs
+
