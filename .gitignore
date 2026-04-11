@@ -36,3 +36,5 @@ build/
 .env
 build-output*.txt
 
+.env.dev
+.env.prd
