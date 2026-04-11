@@ -38,8 +38,8 @@ public class AiEnhancementService {
                 .content();
 
         article.setAiSummary(extractSummary(output));
-        article.setTags(parseTags(output));
-        logger.debug("AI enrichment applied to article: {}", article.getUrl());
+        article.setAiTag(parseTags(output));
+        logger.debug("AI enrichment applied to article: {}", article.getLink());
     }
 
     /**

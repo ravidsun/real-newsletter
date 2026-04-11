@@ -36,7 +36,7 @@ public class ArticleController {
      */
     @GetMapping
     public Page<ArticleDto> list(
-            @PageableDefault(sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
+            @PageableDefault(size = 2, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
         return articleRepository.findAll(pageable).map(ArticleDto::fromEntity);
     }
 

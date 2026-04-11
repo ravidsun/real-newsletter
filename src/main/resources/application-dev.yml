@@ -1,44 +1,16 @@
+# Development profile - only overrides for dev-specific settings
 spring:
-  datasource:
-    # Supabase Transaction Pooler JDBC URL (port 6543).
-    # Append query params to disable prepared-statement caching, which is
-    # incompatible with PgBouncer transaction-mode pooling.
-    url: ${SUPABASE_JDBC_URL:jdbc:postgresql://localhost:5432/real-news}
-    username: ${SUPABASE_DB_USER:postgres}
-    password: ${SUPABASE_DB_PASSWORD:postgres}
-    hikari:
-      connection-timeout: 30000
-      maximum-pool-size: 5
-      # Workaround for "prepared statement does not exist" errors with pgBouncer.
-      data-source-properties:
-        prepareThreshold: 0
-        preparedStatementCacheQueries: 0
-
-  jpa:
-    hibernate:
-      ddl-auto: validate
-    show-sql: false
-    properties:
-      hibernate:
-        default_schema: public
-
   flyway:
-    enabled: true
+    baselineOnMigrate: false
+    cleanDisabled: false
 
   ai:
     openai:
       api-key: ${OPENAI_API_KEY:sk-test-key-not-real}
-      chat:
-        options:
-          model: gpt-4
 
 external:
   news:
     api:
-      url: ${NEWSDATA_API_URL:https://newsdata.io/api/1/news}
       key: ${NEWSDATA_API_KEY:test-key}
 
-ingestion:
-  interval:
-    ms: 600000
 

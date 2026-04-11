@@ -46,8 +46,8 @@ class AiEnhancementServiceTest {
         service.enrichArticle(article);
 
         assertThat(article.getAiSummary()).contains("artificial intelligence");
-        assertThat(article.getTags()).contains("ai");
-        assertThat(article.getTags()).contains("technology");
+        assertThat(article.getAiTag()).contains("ai");
+        assertThat(article.getAiTag()).contains("technology");
     }
 
     @Test
@@ -65,7 +65,7 @@ class AiEnhancementServiceTest {
         service.enrichArticle(article);
 
         assertThat(article.getAiSummary()).isEqualTo("A brief summary without a tags section.");
-        assertThat(article.getTags()).isNull();
+        assertThat(article.getAiTag()).isNull();
     }
 
     @Test
@@ -83,7 +83,7 @@ class AiEnhancementServiceTest {
         service.enrichArticle(article);
 
         assertThat(article.getAiSummary()).isNull();
-        assertThat(article.getTags()).isNull();
+        assertThat(article.getAiTag()).isNull();
     }
 
     @Test

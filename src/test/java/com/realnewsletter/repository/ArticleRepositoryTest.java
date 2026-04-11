@@ -16,18 +16,18 @@ class ArticleRepositoryTest {
     private ArticleRepository articleRepository;
 
     @Test
-    void existsByUrl_shouldReturnTrueWhenArticleExists() {
+    void existsByLink_shouldReturnTrueWhenArticleExists() {
         Article article = new Article("http://example.com", "Title", "Content");
         articleRepository.save(article);
 
-        boolean exists = articleRepository.existsByUrl("http://example.com");
+        boolean exists = articleRepository.existsByLink("http://example.com");
 
         assertThat(exists).isTrue();
     }
 
     @Test
-    void existsByUrl_shouldReturnFalseWhenArticleDoesNotExist() {
-        boolean exists = articleRepository.existsByUrl("http://nonexistent.com");
+    void existsByLink_shouldReturnFalseWhenArticleDoesNotExist() {
+        boolean exists = articleRepository.existsByLink("http://nonexistent.com");
 
         assertThat(exists).isFalse();
     }

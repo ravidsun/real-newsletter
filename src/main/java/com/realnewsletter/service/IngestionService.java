@@ -53,20 +53,20 @@ public class IngestionService {
         int duplicates = 0;
         int saved = 0;
         for (ArticleDto dto : articleList) {
-            if (articleRepository.existsByUrl(dto.url())) {
+            if (articleRepository.existsByLink(dto.link())) {
                 duplicates++;
-                logger.debug("Skipping duplicate article: {}", dto.url());
+                logger.debug("Skipping duplicate article: {}", dto.link());
             } else {
                 Article article = ArticleDto.toEntity(dto);
                 try {
                     aiEnhancementService.enrichArticle(article);
                 } catch (Exception e) {
-                    logger.warn("AI enrichment failed for article {}, saving without AI data", dto.url(), e);
+                    logger.warn("AI enrichment failed for article {}, saving without AI data", dto.link(), e);
                 }
                 Article saved_article = articleRepository.save(article);
                 eventPublisher.publishEvent(new NewArticleEvent(saved_article));
                 saved++;
-                logger.debug("Saved new article: {}", dto.url());
+                logger.debug("Saved new article: {}", dto.link());
             }
         }
         logger.info("Ingestion complete: fetched={}, duplicates={}, saved={}", articleList.size(), duplicates, saved);

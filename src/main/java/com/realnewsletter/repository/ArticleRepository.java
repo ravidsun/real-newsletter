@@ -12,5 +12,5 @@ import java.util.UUID;
 @Repository
 public interface ArticleRepository extends JpaRepository<Article, UUID> {
 
-    boolean existsByUrl(String url);
+    boolean existsByLink(String link);
 }

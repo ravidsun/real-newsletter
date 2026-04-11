@@ -37,18 +37,18 @@ class IngestionServiceTest {
         Article existingArticle = new Article("http://duplicate.com", "Duplicate Title", "Duplicate Content");
         articleRepository.save(existingArticle);
 
-        List<ArticleDto> mockArticles = List.of(
-            new ArticleDto(null, "http://new1.com", "New Title 1", "New Content 1", null, null, null),
-            new ArticleDto(null, "http://new2.com", "New Title 2", "New Content 2", null, null, null),
-            new ArticleDto(null, "http://duplicate.com", "Duplicate Title", "Duplicate Content", null, null, null) // duplicate
-        );
-        when(externalNewsClient.fetchTrendingArticles()).thenReturn(Flux.fromIterable(mockArticles));
+        // Mock ArticleDtos with all required fields (minimal setup)
+        ArticleDto dto1 = new ArticleDto(null, "id1", "http://new1.com", "New Title 1", null, "New Content 1", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, false, null);
+        ArticleDto dto2 = new ArticleDto(null, "id2", "http://new2.com", "New Title 2", null, "New Content 2", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, false, null);
+        ArticleDto dupe = new ArticleDto(null, "dup", "http://duplicate.com", "Duplicate Title", null, "Duplicate Content", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, false, null);
+
+        when(externalNewsClient.fetchTrendingArticles()).thenReturn(Flux.fromIterable(List.of(dto1, dto2, dupe)));
 
         ingestionService.ingestScheduled();
 
         // Verify new articles are saved
-        assertThat(articleRepository.existsByUrl("http://new1.com")).isTrue();
-        assertThat(articleRepository.existsByUrl("http://new2.com")).isTrue();
+        assertThat(articleRepository.existsByLink("http://new1.com")).isTrue();
+        assertThat(articleRepository.existsByLink("http://new2.com")).isTrue();
         // Duplicate should not be saved again
         assertThat(articleRepository.findAll()).hasSize(3); // 1 existing + 2 new
     }

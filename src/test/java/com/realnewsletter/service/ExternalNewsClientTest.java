@@ -70,12 +70,12 @@ class ExternalNewsClientTest {
         StepVerifier.create(externalNewsClient.fetchTrendingArticles())
             // First article: content present → used as body
             .expectNextMatches(dto ->
-                    dto.url().equals("http://example.com/1") &&
+                    dto.link().equals("http://example.com/1") &&
                     dto.title().equals("Title 1") &&
                     dto.content().equals("Full content 1"))
             // Second article: content null (free-tier restriction) → falls back to description
             .expectNextMatches(dto ->
-                    dto.url().equals("http://example.com/2") &&
+                    dto.link().equals("http://example.com/2") &&
                     dto.title().equals("Title 2") &&
                     dto.content().equals("Short description 2"))
             .verifyComplete();
