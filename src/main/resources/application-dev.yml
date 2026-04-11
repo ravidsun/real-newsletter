@@ -1,9 +1,9 @@
 spring:
   datasource:
     # Supabase Transaction Pooler JDBC URL (port 6543).
-    # Loaded from SUPABASE_JDBC_URL environment variable (via .env file).
-    # Falls back to local PostgreSQL if environment variables are not set.
-    url: ${SUPABASE_JDBC_URL:jdbc:postgresql://localhost:5432/newsletter}
+    # Append query params to disable prepared-statement caching, which is
+    # incompatible with PgBouncer transaction-mode pooling.
+    url: ${SUPABASE_JDBC_URL:jdbc:postgresql://localhost:5432/real-news}
     username: ${SUPABASE_DB_USER:postgres}
     password: ${SUPABASE_DB_PASSWORD:postgres}
     hikari:
@@ -27,7 +27,7 @@ spring:
 
   ai:
     openai:
-      api-key: ${OPENAI_API_KEY:}
+      api-key: ${OPENAI_API_KEY:sk-test-key-not-real}
       chat:
         options:
           model: gpt-4
@@ -36,8 +36,9 @@ external:
   news:
     api:
       url: ${NEWSDATA_API_URL:https://newsdata.io/api/1/news}
-      key: ${NEWSDATA_API_KEY:}
+      key: ${NEWSDATA_API_KEY:test-key}
 
 ingestion:
   interval:
     ms: 600000
+
