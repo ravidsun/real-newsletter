@@ -1,0 +1,271 @@
+name: Agent Pipeline
+
+on:
+  # Trigger manually – omit issue_number to run ALL open issues
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: "One or more issue numbers, comma-separated (e.g. 5, 6, 7). Leave empty to run ALL open issues."
+        required: false
+        type: string
+      label_filter:
+        description: "Only process open issues that have this label (optional)"
+        required: false
+        type: string
+
+  # Trigger automatically when the 'run-pipeline' label is added to an issue
+  issues:
+    types: [labeled]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  # ─── Ensure required labels exist ──────────────────────────────────────────
+  ensure-labels:
+    name: Ensure Labels Exist
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create required labels
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { owner, repo } = context.repo;
+            const labels = [
+              { name: 'run-pipeline', color: '0e8a16', description: 'Trigger the agent pipeline for this issue' },
+              { name: 'pipeline-in-progress', color: 'fbca04', description: 'Agent pipeline is running for this issue' },
+              { name: 'pipeline-blocked', color: 'd73a49', description: 'Agent pipeline encountered an error and stopped' },
+            ];
+
+            for (const label of labels) {
+              try {
+                await github.rest.issues.getLabel({ owner, repo, name: label.name });
+                core.info(`Label '${label.name}' already exists`);
+              } catch (error) {
+                if (error.status === 404) {
+                  await github.rest.issues.createLabel({
+                    owner, repo,
+                    name: label.name,
+                    color: label.color,
+                    description: label.description,
+                  });
+                  core.info(`Created label '${label.name}'`);
+                } else {
+                  core.warning(`Failed to check/create label '${label.name}': ${error.message}`);
+                }
+              }
+            }
+
+  # ─── Resolve which issues to process and build a matrix ───────────────────
+  resolve-issues:
+    name: Resolve Issues
+    needs: ensure-labels
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.build.outputs.matrix }}
+      should_run: ${{ steps.build.outputs.should_run }}
+      issue_refs: ${{ steps.build.outputs.issue_refs }}
+      is_batch: ${{ steps.build.outputs.is_batch }}
+    steps:
+      - name: Build issue matrix
+        id: build
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            let numbers = [];
+
+            if (context.eventName === 'issues') {
+              // Ignore any label other than 'run-pipeline'
+              if (context.payload.label?.name !== 'run-pipeline') {
+                core.setOutput('should_run', 'false');
+                core.setOutput('matrix', '{"issue":[]}');
+                return;
+              }
+              numbers = [context.payload.issue.number];
+
+            } else {
+              // workflow_dispatch
+              const specific = '${{ inputs.issue_number }}'.trim();
+              if (specific) {
+                // Accept comma or space-separated values: "5, 6, 7" or "5 6 7"
+                numbers = specific
+                  .split(/[\s,]+/)
+                  .filter(Boolean)
+                  .map(n => parseInt(n, 10))
+                  .filter(n => !isNaN(n))
+                  .sort((a, b) => a - b);
+              } else {
+                // No issue number given → fetch ALL open issues (up to 100)
+                const label = '${{ inputs.label_filter }}'.trim();
+                const params = {
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  state: 'open',
+                  per_page: 100,
+                };
+                if (label) params.labels = label;
+                const { data } = await github.rest.issues.listForRepo(params);
+                numbers = data
+                  .filter(i => !i.pull_request)   // exclude PRs
+                  .map(i => i.number)
+                  .sort((a, b) => a - b);          // ascending order
+              }
+            }
+
+            if (numbers.length === 0) {
+              core.warning('No open issues found to process.');
+              core.setOutput('should_run', 'false');
+              core.setOutput('matrix', '{"issue":[]}');
+              return;
+            }
+
+            core.info(`Will process ${numbers.length} issue(s): ${numbers.join(', ')}`);
+            core.setOutput('should_run', 'true');
+            core.setOutput('matrix', JSON.stringify({ issue: numbers }));
+            core.setOutput('issue_refs', numbers.map(n => `#${n}`).join(' '));
+            core.setOutput('is_batch', numbers.length > 1 ? 'true' : 'false');
+
+  # ─── Write Actions job summary with the IDE invocation command ───────────
+  pipeline-summary:
+    name: Write Pipeline Summary
+    needs: resolve-issues
+    if: needs.resolve-issues.outputs.should_run == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Write job summary
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const refs    = '${{ needs.resolve-issues.outputs.issue_refs }}';
+            const isBatch = '${{ needs.resolve-issues.outputs.is_batch }}' === 'true';
+            const matrix  = JSON.parse('${{ needs.resolve-issues.outputs.matrix }}');
+            const count   = matrix.issue.length;
+            const cmd     = isBatch
+              ? `@pipeline Run pipeline for issues ${refs}`
+              : `@pipeline Run pipeline for issue ${refs}`;
+
+            await core.summary
+              .addHeading('🚀 Agent Pipeline Triggered', 2)
+              .addTable([
+                [{ data: 'Issues',   header: true },
+                 { data: 'Count',    header: true },
+                 { data: 'Mode',     header: true }],
+                [refs, String(count), isBatch ? '📦 Batch (sequential)' : '🔂 Single'],
+              ])
+              .addHeading('Run this in your IDE', 3)
+              .addCodeBlock(cmd, 'text')
+              .addRaw('> The `@pipeline` agent runs automatically: **Planner → Coder → Reviewer → Test (conditional) → DevOps**')
+              .write();
+
+  # ─── Run the agent pipeline for each resolved issue ───────────────────────
+  pipeline:
+    name: "Pipeline – Issue #${{ matrix.issue }}"
+    needs: resolve-issues
+    if: needs.resolve-issues.outputs.should_run == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{ fromJson(needs.resolve-issues.outputs.matrix) }}
+      max-parallel: 1    # one issue at a time – sequential processing
+      fail-fast: false   # a failure on one issue does not abort the others
+    steps:
+      # Remove 'run-pipeline' label to prevent the workflow from re-triggering
+      - name: Remove 'run-pipeline' label
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            try {
+              await github.rest.issues.removeLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: ${{ matrix.issue }},
+                name: 'run-pipeline',
+              });
+            } catch { /* label may not exist – ignore */ }
+
+      # Create the tracking label if it doesn't exist, then apply it
+      - name: Add 'pipeline-in-progress' label
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { owner, repo } = context.repo;
+            try {
+              await github.rest.issues.getLabel({ owner, repo, name: 'pipeline-in-progress' });
+            } catch {
+              await github.rest.issues.createLabel({
+                owner, repo,
+                name: 'pipeline-in-progress',
+                color: 'fbca04',
+                description: 'Agent pipeline is running for this issue',
+              });
+            }
+            await github.rest.issues.addLabels({
+              owner, repo,
+              issue_number: ${{ matrix.issue }},
+              labels: ['pipeline-in-progress'],
+            });
+
+      # Post the pipeline-started comment with the IDE invocation instruction
+      - name: Post pipeline-started comment
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const issue = ${{ matrix.issue }};
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issue,
+              body: [
+                '## 🚀 Agent Pipeline Started',
+                '',
+                `Pipeline triggered for issue #${issue} at ${new Date().toISOString()}.`,
+                '',
+                '| Stage | Agent    | Status     |',
+                '|-------|----------|------------|',
+                '| 1 – Plan   | Planner  | ⏳ Queued |',
+                '| 2 – Code   | Coder    | ⏳ Queued |',
+                '| 3 – Review | Reviewer | ⏳ Queued |',
+                '| 4 – Test   | Test     | ⏳ Queued (conditional) |',
+                '| 5 – Deploy | DevOps   | ⏳ Queued |',
+                '',
+                '**Run in your IDE to start the agents:**',
+                '> ```',
+                `> @pipeline Run pipeline for issue #${issue}`,
+                '> ```',
+              ].join('\n'),
+            });
+
+      # On failure: post a diagnostic comment and remove the tracking label
+      - name: Report failure and clean up
+        if: failure()
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const issue = ${{ matrix.issue }};
+            const { owner, repo } = context.repo;
+            await github.rest.issues.createComment({
+              owner, repo,
+              issue_number: issue,
+              body: [
+                '## ❌ Pipeline Setup Failed',
+                '',
+                'The pipeline failed to start for this issue. Please verify:',
+                '- The issue number is valid',
+                '- Repository permissions are configured correctly',
+                '',
+                'Re-trigger by adding the `run-pipeline` label or using **Actions → workflow_dispatch**.',
+              ].join('\n'),
+            });
+            try {
+              await github.rest.issues.removeLabel({
+                owner, repo, issue_number: issue, name: 'pipeline-in-progress',
+              });
+            } catch { /* ignore */ }

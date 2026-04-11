@@ -1,0 +1,74 @@
+name: Cleanup Feature Branches
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup-feature-branch:
+    name: Delete Feature Branch
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.merged == true
+    steps:
+      - name: Delete feature branch
+        id: delete_branch
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const branch = context.payload.pull_request.head.ref;
+            const repo = context.repo.owner + '/' + context.repo.repo;
+            const headRepoFullName = context.payload.pull_request.head.repo?.full_name;
+            const baseRepoFullName = context.repo.owner + '/' + context.repo.repo;
+            
+            // Skip deletion for pull requests from forks
+            if (headRepoFullName !== baseRepoFullName) {
+              console.log(`ℹ️  Skipping deletion of branch from fork: ${branch} (source: ${headRepoFullName})`);
+              core.setOutput('deleted', 'false');
+              return;
+            }
+            
+            // Skip deletion for main branches
+            if (['main', 'develop', 'master', 'development'].includes(branch)) {
+              console.log(`ℹ️  Skipping deletion of protected branch: ${branch}`);
+              core.setOutput('deleted', 'false');
+              return;
+            }
+            
+            try {
+              await github.rest.git.deleteRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: `heads/${branch}`,
+              });
+              console.log(`✅ Successfully deleted feature branch: ${branch}`);
+              core.setOutput('deleted', 'true');
+            } catch (error) {
+              console.warn(`⚠️  Failed to delete feature branch "${branch}": ${error.message}`);
+              core.setOutput('deleted', 'false');
+              // Don't fail the workflow - branch deletion is best-effort
+            }
+
+      - name: Post cleanup confirmation
+        uses: actions/github-script@v8
+        if: steps.delete_branch.outputs.deleted == 'true'
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const branch = context.payload.pull_request.head.ref;
+            const pr_number = context.payload.pull_request.number;
+            
+            try {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr_number,
+                body: `🧹 **Branch Cleanup**: Feature branch \`${branch}\` has been deleted automatically after merge.`,
+              });
+            } catch (error) {
+              console.warn(`Could not post cleanup comment: ${error.message}`);
+            }
+
