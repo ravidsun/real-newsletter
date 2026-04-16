@@ -47,6 +47,11 @@ ingestion:
   interval:
     ms: 600000
 
+# ── Keep-alive self-ping (prevents Render free-tier spin-down) ────────────────
+app:
+  keep-alive:
+    url: ${KEEP_ALIVE_URL:https://real-newsletter.onrender.com/actuator/health}
+
 # ── CORS ─────────────────────────────────────────────────────────────────────
 # Override CORS_ALLOWED_ORIGINS env var on Render/prod to restrict origins, e.g.:
 #   CORS_ALLOWED_ORIGINS=https://my-frontend.vercel.app
