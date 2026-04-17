@@ -1,5 +1,6 @@
 package com.realnewsletter.service;
 
+import com.realnewsletter.scheduler.NewsApiIngestionScheduler;
 import com.realnewsletter.config.NewsApiSchedulerProperties;
 import com.realnewsletter.model.NewsApiArticle;
 import com.realnewsletter.repository.ArticleRepository;

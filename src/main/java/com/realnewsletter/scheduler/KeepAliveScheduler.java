@@ -1,27 +1,27 @@
-package com.realnewsletter.service;
+package com.realnewsletter.scheduler;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.stereotype.Service;
+import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 
 /**
  * Periodically pings the application's own health endpoint to prevent
  * Render.com from spinning down the free-tier instance due to inactivity.
  */
-@Service
-public class KeepAliveService {
+@Component
+public class KeepAliveScheduler {
 
-    private static final Logger log = LoggerFactory.getLogger(KeepAliveService.class);
+    private static final Logger log = LoggerFactory.getLogger(KeepAliveScheduler.class);
 
     private final WebClient webClient;
 
     @Value("${app.keep-alive.url:https://real-newsletter.onrender.com/actuator/health}")
     private String healthUrl;
 
-    public KeepAliveService(WebClient.Builder webClientBuilder) {
+    public KeepAliveScheduler(WebClient.Builder webClientBuilder) {
         this.webClient = webClientBuilder.build();
     }
 

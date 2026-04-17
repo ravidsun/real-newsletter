@@ -22,3 +22,8 @@ spring:
     openai:
       api-key: test-dummy-key-not-real
 
+  autoconfigure:
+    exclude:
+      - org.springframework.ai.autoconfigure.openai.OpenAiAutoConfiguration
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiAutoConfiguration
+

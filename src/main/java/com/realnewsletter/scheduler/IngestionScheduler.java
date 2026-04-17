@@ -1,23 +1,26 @@
-package com.realnewsletter.service;
+package com.realnewsletter.scheduler;
 
 import com.realnewsletter.model.Article;
 import com.realnewsletter.model.NewArticleEvent;
 import com.realnewsletter.repository.ArticleRepository;
+import com.realnewsletter.service.AiEnhancementService;
+import com.realnewsletter.service.ExternalNewsClient;
+import com.realnewsletter.service.NewsApiClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.stereotype.Service;
+import org.springframework.stereotype.Component;
 
 import java.util.List;
 
 /**
- * Service for scheduled ingestion of articles from all configured news sources.
+ * Scheduled ingestion of articles from all configured news sources.
  */
-@Service
-public class IngestionService {
+@Component
+public class IngestionScheduler {
 
-    private static final Logger logger = LoggerFactory.getLogger(IngestionService.class);
+    private static final Logger logger = LoggerFactory.getLogger(IngestionScheduler.class);
 
     private final ExternalNewsClient externalNewsClient;
     private final NewsApiClient newsApiClient;
@@ -25,11 +28,11 @@ public class IngestionService {
     private final AiEnhancementService aiEnhancementService;
     private final ApplicationEventPublisher eventPublisher;
 
-    public IngestionService(ExternalNewsClient externalNewsClient,
-                            NewsApiClient newsApiClient,
-                            ArticleRepository articleRepository,
-                            AiEnhancementService aiEnhancementService,
-                            ApplicationEventPublisher eventPublisher) {
+    public IngestionScheduler(ExternalNewsClient externalNewsClient,
+                              NewsApiClient newsApiClient,
+                              ArticleRepository articleRepository,
+                              AiEnhancementService aiEnhancementService,
+                              ApplicationEventPublisher eventPublisher) {
         this.externalNewsClient = externalNewsClient;
         this.newsApiClient = newsApiClient;
         this.articleRepository = articleRepository;
@@ -87,3 +90,5 @@ public class IngestionService {
         logger.info("[{}] fetched={}, duplicates={}, saved={}", sourceName, articles.size(), duplicates, saved);
     }
 }
+
+
