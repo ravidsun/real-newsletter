@@ -47,6 +47,21 @@ ingestion:
   interval:
     ms: 600000
 
+# ── Scheduled bulk ingestion jobs ─────────────────────────────────────────────
+scheduler:
+  newsdata:
+    enabled: true
+    # Cron expression: second minute hour day month weekday  (6 AM daily)
+    cron: '0 0 6 * * *'
+    # Maximum number of paginated API requests per run (each page = page-size articles)
+    max-requests: 100
+    # Number of articles requested per API call (Newsdata.io default/max is 10 on free tier)
+    page-size: 10
+    # Optional filters applied to every API request
+    country: us
+    language: en
+    category: general
+
 # ── Keep-alive self-ping (prevents Render free-tier spin-down) ────────────────
 app:
   keep-alive:

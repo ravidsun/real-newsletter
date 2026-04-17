@@ -47,33 +47,66 @@ public class ExternalNewsClient {
             .bodyToMono(NewsdataResponse.class)
             .flatMapMany(response -> Flux.fromIterable(response.results()))
             .take(2)
-            .map(a -> {
-                NewsdataArticle article = new NewsdataArticle(a.link(), a.title(),
-                        a.content() != null ? a.content() : a.description());
-                article.setArticleId(a.article_id());
-                article.setDescription(a.description());
-                article.setKeywords(a.keywordsAsString());
-                article.setCreator(a.creatorAsString());
-                article.setLanguage(a.language());
-                article.setCountry(a.countryAsString());
-                article.setCategory(a.categoryAsString());
-                article.setImageUrl(a.image_url());
-                article.setVideoUrl(a.video_url());
-                article.setSourceId(a.source_id());
-                article.setSourceName(a.source_name());
-                article.setSourcePriority(a.source_priority());
-                article.setSourceUrl(a.source_url());
-                article.setSourceIcon(a.source_icon());
-                article.setSentiment(a.sentiment());
-                article.setSentimentStats(a.sentiment_stats());
-                article.setPubDateTz(a.pubDateTZ());
-                article.setDuplicate(false);
-                return article;
-            });
+            .map(this::mapToArticle);
+    }
+
+    /**
+     * Fetches one page of articles from Newsdata.io using optional filter parameters.
+     *
+     * @param country   ISO 3166-1 alpha-2 country code (may be {@code null} to omit)
+     * @param language  BCP-47 language code (may be {@code null} to omit)
+     * @param category  news category (may be {@code null} to omit)
+     * @param nextPage  pagination cursor returned by the previous call; {@code null} for first page
+     * @param pageSize  number of results to request (Newsdata.io: {@code size} parameter)
+     * @return the raw API response including {@code nextPage} cursor and article list
+     */
+    public Mono<NewsdataResponse> fetchPage(String country, String language,
+                                            String category, String nextPage, int pageSize) {
+        StringBuilder url = new StringBuilder(articlesApiUrl)
+                .append("?apikey=").append(apiKey)
+                .append("&size=").append(pageSize);
+        if (country  != null && !country.isBlank())  url.append("&country=").append(country);
+        if (language != null && !language.isBlank()) url.append("&language=").append(language);
+        if (category != null && !category.isBlank()) url.append("&category=").append(category);
+        if (nextPage != null && !nextPage.isBlank())  url.append("&page=").append(nextPage);
+
+        return webClient.get()
+                .uri(url.toString())
+                .retrieve()
+                .onStatus(status -> !status.is2xxSuccessful(), response -> {
+                    logger.error("Error fetching page from Newsdata.io: {}", response.statusCode());
+                    return Mono.error(new RuntimeException("Failed to fetch page from Newsdata.io"));
+                })
+                .bodyToMono(NewsdataResponse.class);
+    }
+
+    /** Maps a raw Newsdata.io article record to a {@link NewsdataArticle} entity. */
+    public NewsdataArticle mapToArticle(NewsdataArticleRaw a) {
+        NewsdataArticle article = new NewsdataArticle(a.link(), a.title(),
+                a.content() != null ? a.content() : a.description());
+        article.setArticleId(a.article_id());
+        article.setDescription(a.description());
+        article.setKeywords(a.keywordsAsString());
+        article.setCreator(a.creatorAsString());
+        article.setLanguage(a.language());
+        article.setCountry(a.countryAsString());
+        article.setCategory(a.categoryAsString());
+        article.setImageUrl(a.image_url());
+        article.setVideoUrl(a.video_url());
+        article.setSourceId(a.source_id());
+        article.setSourceName(a.source_name());
+        article.setSourcePriority(a.source_priority());
+        article.setSourceUrl(a.source_url());
+        article.setSourceIcon(a.source_icon());
+        article.setSentiment(a.sentiment());
+        article.setSentimentStats(a.sentiment_stats());
+        article.setPubDateTz(a.pubDateTZ());
+        article.setDuplicate(false);
+        return article;
     }
 
     /** Top-level Newsdata.io API response wrapper. */
-    public record NewsdataResponse(String status, List<NewsdataArticleRaw> results) {}
+    public record NewsdataResponse(String status, List<NewsdataArticleRaw> results, String nextPage) {}
 
     /**
      * Raw Newsdata.io article. Array-type fields are converted to comma-separated strings.
