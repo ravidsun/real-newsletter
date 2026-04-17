@@ -1,8 +1,9 @@
-package com.realnewsletter.service;
+package com.realnewsletter.scheduler;
 
 import com.realnewsletter.config.NewsApiSchedulerProperties;
 import com.realnewsletter.model.NewsApiArticle;
 import com.realnewsletter.repository.ArticleRepository;
+import com.realnewsletter.service.NewsApiClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -114,4 +115,5 @@ public class NewsApiIngestionScheduler {
                 totalFetched, totalSaved, totalSkipped, errors);
     }
 }
+
 

@@ -3,6 +3,7 @@ package com.realnewsletter.service;
 import com.realnewsletter.model.NewsdataArticle;
 import com.realnewsletter.model.NewsApiArticle;
 import com.realnewsletter.repository.ArticleRepository;
+import com.realnewsletter.scheduler.IngestionScheduler;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -18,7 +19,7 @@ import static org.mockito.Mockito.when;
 class IngestionServiceTest {
 
     @Autowired
-    private IngestionService ingestionService;
+    private IngestionScheduler ingestionService;
 
     @Autowired
     private ArticleRepository articleRepository;
