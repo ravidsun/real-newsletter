@@ -4,12 +4,14 @@ import com.realnewsletter.scheduler.NewsDataIngestionScheduler;
 import com.realnewsletter.config.NewsDataSchedulerProperties;
 import com.realnewsletter.model.NewsdataArticle;
 import com.realnewsletter.repository.ArticleRepository;
+import com.realnewsletter.service.AiEnhancementService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
@@ -26,6 +28,8 @@ class NewsDataIngestionSchedulerTest {
     @Mock private NewsDataSchedulerProperties props;
     @Mock private ExternalNewsClient newsClient;
     @Mock private ArticleRepository articleRepository;
+    @Mock private AiEnhancementService aiEnhancementService;
+    @Mock private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private NewsDataIngestionScheduler scheduler;

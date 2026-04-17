@@ -1,55 +1,104 @@
 package com.realnewsletter.service;
 
+import com.realnewsletter.config.NewsDataSchedulerProperties;
 import com.realnewsletter.model.NewsdataArticle;
-import com.realnewsletter.model.NewsApiArticle;
 import com.realnewsletter.repository.ArticleRepository;
-import com.realnewsletter.scheduler.IngestionScheduler;
+import com.realnewsletter.scheduler.NewsDataIngestionScheduler;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.context.ActiveProfiles;
-import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
 
+/**
+ * Integration test for the core ingestion logic (deduplication, save, AI enrichment)
+ * via NewsDataIngestionScheduler.
+ */
 @SpringBootTest
 @ActiveProfiles("test")
 class IngestionServiceTest {
 
     @Autowired
-    private IngestionScheduler ingestionService;
-
-    @Autowired
     private ArticleRepository articleRepository;
 
-    @MockitoBean
-    private ExternalNewsClient externalNewsClient;
-
-    @MockitoBean
-    private NewsApiClient newsApiClient;
-
-    @MockitoBean
-    private AiEnhancementService aiEnhancementService;
-
     @Test
-    void ingestScheduled_shouldSaveNewArticlesAndSkipDuplicates() {
-        // Pre-save one article to test deduplication
-        NewsdataArticle existingArticle = new NewsdataArticle("http://duplicate.com", "Duplicate Title", "Duplicate Content");
-        articleRepository.save(existingArticle);
+    void ingestion_shouldSaveNewArticlesAndSkipDuplicates() {
+        // Arrange
+        ExternalNewsClient mockClient = mock(ExternalNewsClient.class);
+        AiEnhancementService mockAi = mock(AiEnhancementService.class);
+        ApplicationEventPublisher mockPublisher = mock(ApplicationEventPublisher.class);
+        NewsDataSchedulerProperties props = new NewsDataSchedulerProperties();
+        props.setEnabled(true);
+        props.setMaxRequests(1);
+        props.setPageSize(10);
 
-        NewsdataArticle dto1 = new NewsdataArticle("http://new1.com", "New Title 1", "New Content 1");
-        NewsdataArticle dto2 = new NewsdataArticle("http://new2.com", "New Title 2", "New Content 2");
-        NewsdataArticle dupe = new NewsdataArticle("http://duplicate.com", "Duplicate Title", "Duplicate Content");
+        NewsdataArticle existing = new NewsdataArticle("http://duplicate.com", "Duplicate", "Content");
+        articleRepository.save(existing);
 
-        when(externalNewsClient.fetchTrendingArticles()).thenReturn(Flux.just(dto1, dto2, dupe));
-        when(newsApiClient.fetchTopHeadlines()).thenReturn(Flux.empty());
+        NewsdataArticle article1 = new NewsdataArticle("http://new1.com", "New 1", "Content 1");
+        NewsdataArticle article2 = new NewsdataArticle("http://new2.com", "New 2", "Content 2");
+        NewsdataArticle dupe     = new NewsdataArticle("http://duplicate.com", "Duplicate", "Content");
 
-        ingestionService.ingestScheduled();
+        ExternalNewsClient.NewsdataResponse response = new ExternalNewsClient.NewsdataResponse(
+                "success",
+                List.of(
+                        toRaw(article1),
+                        toRaw(article2),
+                        toRaw(dupe)
+                ),
+                null
+        );
 
+        when(mockClient.fetchPage(any(), any(), any(), any(), anyInt())).thenReturn(Mono.just(response));
+        when(mockClient.mapToArticle(any())).thenAnswer(inv -> {
+            ExternalNewsClient.NewsdataArticleRaw raw = inv.getArgument(0);
+            return new NewsdataArticle(raw.link(), raw.title(), raw.content());
+        });
+
+        NewsDataIngestionScheduler scheduler = new NewsDataIngestionScheduler(
+                props, mockClient, articleRepository, mockAi, mockPublisher);
+
+        // Act
+        scheduler.runIngestion();
+
+        // Assert
         assertThat(articleRepository.existsByLink("http://new1.com")).isTrue();
         assertThat(articleRepository.existsByLink("http://new2.com")).isTrue();
-        assertThat(articleRepository.findAll()).hasSize(3); // 1 existing + 2 new
+        verify(mockAi, times(2)).enrichArticle(any()); // only 2 new articles enriched
+        verify(mockPublisher, times(2)).publishEvent(any(Object.class)); // 2 SSE events fired
+    }
+
+    private ExternalNewsClient.NewsdataArticleRaw toRaw(NewsdataArticle a) {
+        return new ExternalNewsClient.NewsdataArticleRaw(
+                null,           // article_id
+                a.getTitle(),   // title
+                a.getLink(),    // link
+                null,           // description
+                a.getContent(), // content
+                null,           // keywords
+                null,           // creator
+                null,           // language
+                null,           // country
+                null,           // category
+                null,           // image_url
+                null,           // video_url
+                null,           // pubDate
+                null,           // pubDateTZ
+                null,           // fetched_at
+                null,           // source_id
+                null,           // source_name
+                null,           // source_priority
+                null,           // source_url
+                null,           // source_icon
+                null,           // sentiment
+                null            // sentiment_stats
+        );
     }
 }

@@ -1,11 +1,14 @@
 package com.realnewsletter.scheduler;
 
 import com.realnewsletter.config.NewsApiSchedulerProperties;
+import com.realnewsletter.model.NewArticleEvent;
 import com.realnewsletter.model.NewsApiArticle;
 import com.realnewsletter.repository.ArticleRepository;
+import com.realnewsletter.service.AiEnhancementService;
 import com.realnewsletter.service.NewsApiClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -29,13 +32,19 @@ public class NewsApiIngestionScheduler {
     private final NewsApiSchedulerProperties props;
     private final NewsApiClient newsApiClient;
     private final ArticleRepository articleRepository;
+    private final AiEnhancementService aiEnhancementService;
+    private final ApplicationEventPublisher eventPublisher;
 
     public NewsApiIngestionScheduler(NewsApiSchedulerProperties props,
                                      NewsApiClient newsApiClient,
-                                     ArticleRepository articleRepository) {
+                                     ArticleRepository articleRepository,
+                                     AiEnhancementService aiEnhancementService,
+                                     ApplicationEventPublisher eventPublisher) {
         this.props = props;
         this.newsApiClient = newsApiClient;
         this.articleRepository = articleRepository;
+        this.aiEnhancementService = aiEnhancementService;
+        this.eventPublisher = eventPublisher;
     }
 
     /**
@@ -89,7 +98,14 @@ public class NewsApiIngestionScheduler {
                     if (articleRepository.existsByLink(article.getLink())) {
                         totalSkipped++;
                     } else {
+                        try {
+                            aiEnhancementService.enrichArticle(article);
+                        } catch (Exception e) {
+                            logger.warn("[NewsApiScheduler] AI enrichment failed for {}, saving without AI data",
+                                    article.getLink(), e);
+                        }
                         articleRepository.save(article);
+                        eventPublisher.publishEvent(new NewArticleEvent(article));
                         totalSaved++;
                     }
                 }
@@ -119,5 +135,4 @@ public class NewsApiIngestionScheduler {
                 totalFetched, totalSaved, totalSkipped, errors);
     }
 }
-
 
