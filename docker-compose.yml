@@ -21,5 +21,6 @@ services:
       SUPABASE_DB_PASSWORD: ${SUPABASE_DB_PASSWORD}
     env_file:
       - .env
+    pull_policy: build
     restart: unless-stopped
 
