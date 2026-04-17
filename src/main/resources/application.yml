@@ -61,6 +61,18 @@ scheduler:
     country: us
     language: en
     category: general
+  newsapi:
+    enabled: true
+    # Cron expression: second minute hour day month weekday  (7 AM daily)
+    cron: '0 0 7 * * *'
+    # Maximum number of paginated API requests per run
+    max-requests: 50
+    # Number of articles per API call (NewsAPI free tier max = 100; set lower to stay within limits)
+    page-size: 20
+    # Optional filters applied to every API request
+    country: us
+    language: en
+    category: general
 
 # ── Keep-alive self-ping (prevents Render free-tier spin-down) ────────────────
 app:
