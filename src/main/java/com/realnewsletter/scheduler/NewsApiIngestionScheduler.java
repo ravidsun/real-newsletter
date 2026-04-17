@@ -67,7 +67,11 @@ public class NewsApiIngestionScheduler {
                 ).block();
 
                 if (response == null || response.articles() == null || response.articles().isEmpty()) {
-                    logger.info("[NewsApiScheduler] No more results on page {} – stopping early.", page);
+                    if ("rate-limited".equals(response != null ? response.status() : null)) {
+                        logger.warn("[NewsApiScheduler] Rate limited by NewsAPI on page {} – stopping pagination.", page);
+                    } else {
+                        logger.info("[NewsApiScheduler] No more results on page {} – stopping early.", page);
+                    }
                     break;
                 }
 
