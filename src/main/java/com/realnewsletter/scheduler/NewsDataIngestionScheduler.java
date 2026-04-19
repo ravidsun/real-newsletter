@@ -52,12 +52,24 @@ public class NewsDataIngestionScheduler {
      * Entry point triggered by Spring's scheduling infrastructure.
      * The cron expression is read from {@code scheduler.newsdata.cron}.
      */
+    /**
+     * Scheduled entry point — respects the {@code scheduler.newsdata.enabled} flag.
+     * For manual/on-demand runs use {@link #runIngestionNow()} directly.
+     */
     @Scheduled(cron = "${scheduler.newsdata.cron:0 0 6 * * *}")
     public void runIngestion() {
         if (!props.isEnabled()) {
             logger.info("[NewsDataScheduler] Scheduler is disabled – skipping run.");
             return;
         }
+        runIngestionNow();
+    }
+
+    /**
+     * Executes the ingestion unconditionally (bypasses the enabled flag).
+     * Called by {@link com.realnewsletter.controller.IngestionController} for manual triggers.
+     */
+    public void runIngestionNow() {
 
         logger.info("[NewsDataScheduler] Starting bulk ingestion from Newsdata.io "
                 + "(maxRequests={}, pageSize={}, country={}, language={}, category={})",
