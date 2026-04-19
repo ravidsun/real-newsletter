@@ -49,7 +49,7 @@ public class NewsApiSchedulerProperties {
 
     /** News category filter (e.g. {@code general}, {@code business}, {@code technology}).
      *  Leave {@code null} or omit from config to fetch all categories. */
-    private String category = null;
+    private String category = "general";
 
     // ----- getters & setters -----
 

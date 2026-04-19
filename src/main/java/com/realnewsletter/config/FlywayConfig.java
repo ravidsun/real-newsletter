@@ -7,6 +7,7 @@ import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.sql.init.dependency.AbstractBeansOfTypeDatabaseInitializerDetector;
 import org.springframework.boot.sql.init.dependency.DatabaseInitializerDetector;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -23,6 +24,7 @@ import java.util.Set;
  *     automatically waits for Flyway to finish before validating entities.
  */
 @Configuration
+@ConditionalOnProperty(name = "spring.flyway.enabled", havingValue = "true", matchIfMissing = true)
 public class FlywayConfig {
 
     @Value("${spring.flyway.schemas:public}")
