@@ -116,9 +116,15 @@ public class NewsApiIngestionScheduler {
                             logger.warn("[NewsApiScheduler] AI enrichment failed for {}, saving without AI data",
                                     article.getLink(), e);
                         }
-                        articleRepository.save(article);
-                        eventPublisher.publishEvent(new NewArticleEvent(article));
-                        totalSaved++;
+                        try {
+                            articleRepository.save(article);
+                            eventPublisher.publishEvent(new NewArticleEvent(article));
+                            totalSaved++;
+                        } catch (Exception e) {
+                            logger.error("[NewsApiScheduler] Failed to save article {}: {}",
+                                    article.getLink(), e.getMessage(), e);
+                            errors++;
+                        }
                     }
                 }
 

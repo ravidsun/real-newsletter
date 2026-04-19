@@ -18,7 +18,7 @@ spring:
     show-sql: false  # Set to true if you want to see SQL queries
     properties:
       hibernate:
-        format_sql: true  # Pretty-print SQL (if show-sql is true)
+        format_sql: false  # Pretty-print SQL (if show-sql is true)
         use_sql_comments: true
 
   flyway:

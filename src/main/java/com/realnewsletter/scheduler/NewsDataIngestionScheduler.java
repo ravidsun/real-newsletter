@@ -101,6 +101,12 @@ public class NewsDataIngestionScheduler {
                 totalFetched += articles.size();
 
                 for (NewsdataArticle article : articles) {
+                    if (article.getLink() == null || article.getLink().isBlank()) {
+                        logger.warn("[NewsDataScheduler] Skipping article with null/blank link: title={}",
+                                article.getTitle());
+                        totalSkipped++;
+                        continue;
+                    }
                     if (articleRepository.existsByLink(article.getLink())) {
                         totalSkipped++;
                     } else {
@@ -110,9 +116,15 @@ public class NewsDataIngestionScheduler {
                             logger.warn("[NewsDataScheduler] AI enrichment failed for {}, saving without AI data",
                                     article.getLink(), e);
                         }
-                        articleRepository.save(article);
-                        eventPublisher.publishEvent(new NewArticleEvent(article));
-                        totalSaved++;
+                        try {
+                            articleRepository.save(article);
+                            eventPublisher.publishEvent(new NewArticleEvent(article));
+                            totalSaved++;
+                        } catch (Exception e) {
+                            logger.error("[NewsDataScheduler] Failed to save article {}: {}",
+                                    article.getLink(), e.getMessage(), e);
+                            errors++;
+                        }
                     }
                 }
 
