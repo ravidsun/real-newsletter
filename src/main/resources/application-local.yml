@@ -9,10 +9,12 @@ spring:
     password: ${DB_PASSWORD:}
     hikari:
       maximum-pool-size: 3          # Lower pool size for local development (base uses 5)
+      minimum-idle: 3               # Keep all connections warm
 
   jpa:
     hibernate:
       ddl-auto: validate  # Let Flyway own the schema; Hibernate only validates
+    open-in-view: false           # Never hold a DB connection for the full HTTP request lifecycle
     show-sql: true  # Set to true if you want to see SQL queries
     properties:
       hibernate:
@@ -43,18 +45,18 @@ external:
 # Local scheduler settings - run less frequently
 scheduler:
   newsdata:
-    enabled: false  # Disable scheduled jobs in local development
+    enabled: true  # Disable scheduled jobs in local development
     cron: '0 0 6 * * *'
-    max-requests: 1  # Only 1 request for testing
-    page-size: 1
+    max-requests: 10  # Only 1 request for testing
+    page-size: 10
     country: us
     language: en
     # category: general   # Optional – omit to fetch all categories
   newsapi:
-    enabled: false  # Disable scheduled jobs in local development
+    enabled: true  # Disable scheduled jobs in local development
     cron: '0 0 7 * * *'
-    max-requests: 1  # Only 1 request for testing
-    page-size: 1
+    max-requests: 10  # Only 1 request for testing
+    page-size: 10
     country: us
     language: en
     # category: general   # Optional – omit to fetch all categories
@@ -62,7 +64,7 @@ scheduler:
 # Local app settings
 app:
   keep-alive:
-    url: http://localhost:8081/actuator/health
+    url: http://localhost:${server.port}/actuator/health
 
 cors:
   allowed-origins: http://localhost:4201,http://localhost:3000,http://localhost:8081

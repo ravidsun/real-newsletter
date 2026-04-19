@@ -7,15 +7,15 @@ spring:
     # Falls back to local PostgreSQL if environment variables are not set.
     url: ${DB_URL:jdbc:postgresql://localhost:5432/realnews}
     username: ${DB_USER:realnewsuser}
-    password: ${DB_PASSWORD:postgres}
+    password: ${DB_PASSWORD:}
     hikari:
       maximum-pool-size: 5
-      minimum-idle: 1
+      minimum-idle: 5               # Keep all connections warm (fixed pool, no cold-start penalty)
       connection-timeout: 10000     # Fail fast after 10s
       idle-timeout: 300000          # Release idle connections after 5 min
       max-lifetime: 600000          # Recycle connections every 10 min
       keepalive-time: 60000         # Send keepalive every 60s to prevent stale connections
-      connection-test-query: SELECT 1
+      # DO NOT set connection-test-query — PostgreSQL JDBC4 uses native isValid() which is faster
       # Workaround for "prepared statement does not exist" errors with pgBouncer.
       data-source-properties:
         prepareThreshold: 0
@@ -25,6 +25,7 @@ spring:
     hibernate:
       ddl-auto: none
     show-sql: false
+    open-in-view: false           # Never hold a DB connection for the full HTTP request lifecycle
     database-platform: org.hibernate.dialect.PostgreSQLDialect
     properties:
       hibernate:
