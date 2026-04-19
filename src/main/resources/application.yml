@@ -72,7 +72,7 @@ scheduler:
     # Optional filters applied to every API request
     country: us
     language: en
-    category: general
+    # category: general   # Optional – omit to fetch all categories
   newsapi:
     enabled: true
     # Cron expression: second minute hour day month weekday  (7 AM daily)
@@ -84,7 +84,7 @@ scheduler:
     # Optional filters applied to every API request
     country: us
     language: en
-    category: general
+    # category: general   # Optional – omit to fetch all categories
 
 # ── Keep-alive self-ping (prevents Render free-tier spin-down) ────────────────
 app:

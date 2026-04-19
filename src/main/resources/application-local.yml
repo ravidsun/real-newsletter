@@ -49,7 +49,7 @@ scheduler:
     page-size: 1
     country: us
     language: en
-    category: general
+    # category: general   # Optional – omit to fetch all categories
   newsapi:
     enabled: false  # Disable scheduled jobs in local development
     cron: '0 0 7 * * *'
@@ -57,7 +57,7 @@ scheduler:
     page-size: 1
     country: us
     language: en
-    category: general
+    # category: general   # Optional – omit to fetch all categories
 
 # Local app settings
 app:
