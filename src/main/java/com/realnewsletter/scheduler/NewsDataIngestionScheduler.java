@@ -1,10 +1,14 @@
-package com.realnewsletter.service;
+package com.realnewsletter.scheduler;
 
 import com.realnewsletter.config.NewsDataSchedulerProperties;
+import com.realnewsletter.model.NewArticleEvent;
 import com.realnewsletter.model.NewsdataArticle;
 import com.realnewsletter.repository.ArticleRepository;
+import com.realnewsletter.service.AiEnhancementService;
+import com.realnewsletter.service.ExternalNewsClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -29,13 +33,19 @@ public class NewsDataIngestionScheduler {
     private final NewsDataSchedulerProperties props;
     private final ExternalNewsClient newsClient;
     private final ArticleRepository articleRepository;
+    private final AiEnhancementService aiEnhancementService;
+    private final ApplicationEventPublisher eventPublisher;
 
     public NewsDataIngestionScheduler(NewsDataSchedulerProperties props,
                                       ExternalNewsClient newsClient,
-                                      ArticleRepository articleRepository) {
+                                      ArticleRepository articleRepository,
+                                      AiEnhancementService aiEnhancementService,
+                                      ApplicationEventPublisher eventPublisher) {
         this.props = props;
         this.newsClient = newsClient;
         this.articleRepository = articleRepository;
+        this.aiEnhancementService = aiEnhancementService;
+        this.eventPublisher = eventPublisher;
     }
 
     /**
@@ -82,7 +92,14 @@ public class NewsDataIngestionScheduler {
                     if (articleRepository.existsByLink(article.getLink())) {
                         totalSkipped++;
                     } else {
+                        try {
+                            aiEnhancementService.enrichArticle(article);
+                        } catch (Exception e) {
+                            logger.warn("[NewsDataScheduler] AI enrichment failed for {}, saving without AI data",
+                                    article.getLink(), e);
+                        }
                         articleRepository.save(article);
+                        eventPublisher.publishEvent(new NewArticleEvent(article));
                         totalSaved++;
                     }
                 }
@@ -104,4 +121,3 @@ public class NewsDataIngestionScheduler {
                 totalFetched, totalSaved, totalSkipped, errors);
     }
 }
-

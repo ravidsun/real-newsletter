@@ -1,6 +1,6 @@
 # Real Newsletter
 
-An AI-powered news aggregation and delivery platform built with **Spring Boot 3**, **Spring AI (OpenAI GPT-4)**, and **PostgreSQL (Supabase)**. It periodically fetches the latest articles from the [Newsdata.io API](https://newsdata.io), enriches them with AI-generated summaries and tags, persists them, and delivers them to clients via a paginated REST API and a real-time Server-Sent Events (SSE) stream.
+An AI-powered news aggregation and delivery platform built with **Spring Boot 4**, **Spring AI 2 (OpenAI GPT-4)**, and **PostgreSQL (Supabase)**. It periodically fetches the latest articles from [Newsdata.io](https://newsdata.io) and the [NewsAPI](https://newsapi.org), enriches them with AI-generated summaries and tags, persists them, and delivers them to clients via a paginated REST API and a real-time Server-Sent Events (SSE) stream.
 
 ---
 
@@ -22,6 +22,7 @@ An AI-powered news aggregation and delivery platform built with **Spring Boot 3*
 - [CORS Configuration](#cors-configuration)
 - [Running Tests](#running-tests)
 - [Project Structure](#project-structure)
+- [Release History](#release-history)
 
 ---
 
@@ -29,44 +30,52 @@ An AI-powered news aggregation and delivery platform built with **Spring Boot 3*
 
 | Feature | Description |
 |---|---|
-| **News Ingestion** | Scheduled job fetches the latest English/US news from the [Newsdata.io API](https://newsdata.io) (`https://newsdata.io/api/1/news`) every 10 minutes. Duplicate articles (by URL) are automatically skipped. |
+| **Dual News Ingestion** | Scheduled jobs fetch the latest English/US news from both [Newsdata.io](https://newsdata.io) and [NewsAPI](https://newsapi.org) on configurable intervals. Duplicate articles (by URL) are automatically skipped. |
 | **AI Enrichment** | Each new article is sent to OpenAI GPT-4 via Spring AI to generate a plain-text summary and a set of comma-separated tags. |
+| **Rate Limiting** | Per-source rate limiting prevents API quota exhaustion across both news providers. |
 | **Paginated REST API** | `GET /api/v1/articles` returns stored articles as a paginated JSON response, sorted by newest first. |
 | **Real-Time SSE Stream** | `GET /api/v1/articles/stream` opens a persistent Server-Sent Events connection. Every new article saved triggers a `new-article` event pushed to all connected clients instantly. |
 | **Profile-Based CORS** | Separate CORS policies for `development` (all origins allowed) and `production` (restricted to a configured frontend origin). |
 | **Database Migrations** | Flyway manages schema evolution automatically on startup. |
+| **Keep-Alive Scheduler** | A background job periodically pings the database to prevent idle connection drops on Supabase's connection pooler. |
 | **Actuator** | Spring Boot Actuator endpoints available for health and metrics monitoring. |
+| **OpenAPI / Swagger UI** | Auto-generated API docs available at `/swagger-ui.html`. |
 
 ---
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                        Scheduler (10 min)                   │
-│                              │                              │
-│              ┌───────────────▼───────────────┐              │
-│              │        IngestionService        │              │
-│              │  1. Fetch from NewsAPI         │              │
-│              │  2. Deduplicate by URL         │              │
-│              │  3. AI-enrich (summary + tags) │              │
-│              │  4. Save to DB                 │              │
-│              │  5. Publish NewArticleEvent    │              │
-│              └───────┬───────────────┬────────┘              │
-│                      │               │                       │
-│          ┌───────────▼──┐  ┌─────────▼────────────┐         │
-│          │  PostgreSQL   │  │  ArticleStreamService │         │
-│          │  (Supabase)   │  │  (SSE broadcaster)    │         │
-│          └───────────────┘  └─────────┬────────────┘         │
-│                                       │ push event           │
-│                              ┌────────▼────────┐             │
-│                              │  SSE Clients    │             │
-│                              │  (browsers, curl│             │
-│                              │   etc.)         │             │
-│                              └─────────────────┘             │
-│                                                              │
-│  REST Clients ──► GET /api/v1/articles ──► ArticleController │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│              Schedulers (configurable intervals)                      │
+│                                                                       │
+│   ┌──────────────────────┐   ┌──────────────────────┐               │
+│   │ NewsApiIngestion      │   │ NewsDataIngestion     │               │
+│   │ Scheduler            │   │ Scheduler             │               │
+│   └──────────┬───────────┘   └──────────┬────────────┘               │
+│              │                          │                             │
+│              └────────────┬─────────────┘                             │
+│                           ▼                                           │
+│                  IngestionScheduler                                    │
+│              1. Fetch from news source                                 │
+│              2. Deduplicate by URL                                     │
+│              3. AI-enrich (summary + tags via GPT-4)                  │
+│              4. Save to DB                                             │
+│              5. Publish NewArticleEvent                                │
+│                     │                  │                              │
+│         ┌───────────▼──┐  ┌────────────▼──────────┐                  │
+│         │  PostgreSQL   │  │  ArticleStreamService  │                  │
+│         │  (Supabase)   │  │  (SSE broadcaster)     │                  │
+│         └───────────────┘  └────────────┬───────────┘                  │
+│                                         │ push event                  │
+│                                ┌────────▼────────┐                    │
+│                                │  SSE Clients    │                    │
+│                                │  (browsers,curl │                    │
+│                                │   etc.)         │                    │
+│                                └─────────────────┘                    │
+│                                                                       │
+│  REST Clients ──► GET /api/v1/articles ──► ArticleController          │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -76,27 +85,29 @@ An AI-powered news aggregation and delivery platform built with **Spring Boot 3*
 | Layer | Technology |
 |---|---|
 | Language | Java 21 |
-| Framework | Spring Boot 3.4 |
-| AI Integration | Spring AI 1.0.0-M6 (OpenAI GPT-4) |
-| HTTP Client | Spring WebFlux / WebClient (reactive) |
+| Framework | Spring Boot 4.0.0 |
+| AI Integration | Spring AI 2.0.0-M2 (OpenAI GPT-4) |
+| HTTP Client | Spring `RestClient` (synchronous) |
 | Persistence | Spring Data JPA + Hibernate |
 | Database | PostgreSQL via Supabase (production), H2 (tests) |
 | Migrations | Flyway |
 | Real-Time | Server-Sent Events (`SseEmitter`) |
-| Build | Maven |
+| Build | Maven 3.9+ |
 | Containerisation | Docker / Docker Compose |
-| Testing | JUnit 5, Mockito, MockMvc, Reactor Test |
-| Coverage | JaCoCo |
+| Testing | JUnit 5, Mockito, MockMvc |
+| Coverage | JaCoCo (≥ 87% line coverage) |
+| API Docs | SpringDoc OpenAPI 3 |
 
 ---
 
 ## Prerequisites
 
 - **Java 21+**
-- **Maven 3.9+** (or use the Maven wrapper `./mvnw`)
+- **Maven 3.9+**
 - **Docker & Docker Compose** (optional, for containerised run)
 - A **[Supabase](https://supabase.com)** project (free tier works) — provides the PostgreSQL database
 - A **[Newsdata.io](https://newsdata.io)** API key — news feed (free tier: 200 credits/day)
+- A **[NewsAPI](https://newsapi.org)** API key — news feed (free tier available)
 - An **[OpenAI](https://platform.openai.com)** API key (for GPT-4 AI enrichment)
 
 ---
@@ -114,6 +125,9 @@ DB_PASSWORD=your-supabase-password
 NEWSDATA_API_URL=https://newsdata.io/api/1/news
 NEWSDATA_API_KEY=pub_your-newsdata-key
 
+NEWS_API_URL=https://newsapi.org/v2/everything
+NEWS_API_KEY=your-newsapi-key
+
 OPENAI_API_KEY=sk-...
 ```
 
@@ -126,9 +140,11 @@ OPENAI_API_KEY=sk-...
 | `spring.datasource.password` | *(required)* `$DB_PASSWORD` | Database password |
 | `spring.ai.openai.api-key` | `$OPENAI_API_KEY` | OpenAI API key for GPT-4 enrichment |
 | `spring.ai.openai.chat.options.model` | `gpt-4` | OpenAI model name |
-| `external.news.api.url` | `$NEWSDATA_API_URL` (default: `https://newsdata.io/api/1/news`) | Newsdata.io articles endpoint |
+| `external.news.api.url` | `$NEWSDATA_API_URL` | Newsdata.io articles endpoint |
 | `external.news.api.key` | `$NEWSDATA_API_KEY` | Newsdata.io API key |
-| `ingestion.interval.ms` | `600000` (10 min) | How often the ingestion job runs (milliseconds) |
+| `news.api.url` | `$NEWS_API_URL` | NewsAPI endpoint |
+| `news.api.key` | `$NEWS_API_KEY` | NewsAPI key |
+| `ingestion.interval.ms` | `600000` (10 min) | How often the ingestion jobs run (milliseconds) |
 
 ---
 
@@ -147,6 +163,8 @@ export DB_USER="postgres"
 export DB_PASSWORD="your-password"
 export NEWSDATA_API_URL="https://newsdata.io/api/1/news"
 export NEWSDATA_API_KEY="pub_your-newsdata-key"
+export NEWS_API_URL="https://newsapi.org/v2/everything"
+export NEWS_API_KEY="your-newsapi-key"
 export OPENAI_API_KEY="sk-..."
 
 # 3. Run the application
@@ -172,6 +190,8 @@ docker compose up --build
 
 # The app is available at http://localhost:8080
 ```
+
+The Docker build uses **layer caching** — Maven dependencies are downloaded in a dedicated layer keyed on `pom.xml` only, so source-only changes rebuild the JAR without re-downloading all dependencies.
 
 To stop:
 
@@ -213,7 +233,7 @@ curl "http://localhost:8080/api/v1/articles?page=0&size=5&sort=createdAt,desc"
       "content": "Full article content here...",
       "aiSummary": "A major technology company announced a groundbreaking product today...",
       "tags": "technology, innovation, ai",
-      "createdAt": "2026-04-11T09:45:00Z"
+      "createdAt": "2026-04-17T09:45:00Z"
     }
   ],
   "pageable": {
@@ -221,13 +241,19 @@ curl "http://localhost:8080/api/v1/articles?page=0&size=5&sort=createdAt,desc"
     "pageSize": 5,
     "sort": { "sorted": true, "unsorted": false }
   },
-  "totalElements": 42,
-  "totalPages": 9,
+  "page": {
+    "totalElements": 42,
+    "totalPages": 9,
+    "number": 0,
+    "size": 5
+  },
   "last": false,
   "first": true,
   "numberOfElements": 5
 }
 ```
+
+> **Note:** Spring Data 4 moved pagination metadata (`totalElements`, `totalPages`, `number`) under the nested `page` key in JSON responses.
 
 ---
 
@@ -275,7 +301,7 @@ source.onerror = () => {
 
 1. A client opens a connection to `GET /api/v1/articles/stream`.
 2. The server registers an `SseEmitter` (infinite timeout) and keeps the HTTP connection open.
-3. When the scheduled ingestion job saves a new article, it publishes a `NewArticleEvent` via Spring's `ApplicationEventPublisher`.
+3. When a scheduled ingestion job saves a new article, it publishes a `NewArticleEvent` via Spring's `ApplicationEventPublisher`.
 4. `ArticleStreamService` listens for the event and calls `emitter.send(...)` on every registered emitter.
 5. Disconnected clients (detected via `IOException`) are automatically removed from the list.
 
@@ -362,7 +388,7 @@ mvn test -Dtest=ArticleControllerTest
 # Open: target/site/jacoco/index.html
 ```
 
-Tests use an **H2 in-memory database** (profile `test`) — no Supabase connection required. Flyway is disabled in test mode; Hibernate creates the schema automatically from JPA entity metadata.
+Tests use an **H2 in-memory database** (profile `test`) — no Supabase connection required. Flyway is disabled in test mode; Hibernate creates the schema automatically from JPA entity metadata. Spring AI OpenAI autoconfiguration is excluded in the test profile to avoid external API dependencies.
 
 ### Test Coverage
 
@@ -372,6 +398,13 @@ Tests use an **H2 in-memory database** (profile `test`) — no Supabase connecti
 | `ArticleControllerTest` | Paginated listing, sorting, SSE async start (integration) |
 | `AiEnhancementServiceTest` | Summary extraction, tag parsing, null handling (unit) |
 | `IngestionServiceTest` | Deduplication, new article persistence (integration) |
+| `ExternalNewsClientTest` | Newsdata.io HTTP client response mapping (unit) |
+| `ExternalNewsClientPaginatedTest` | Newsdata.io pagination logic (unit) |
+| `NewsApiClientPaginatedTest` | NewsAPI pagination logic (unit) |
+| `NewsApiIngestionSchedulerTest` | NewsAPI scheduler orchestration (unit) |
+| `NewsDataIngestionSchedulerTest` | Newsdata.io scheduler orchestration (unit) |
+
+Current line coverage: **≥ 87%**
 
 ---
 
@@ -382,29 +415,43 @@ real-newsletter/
 ├── src/
 │   ├── main/
 │   │   ├── java/com/realnewsletter/
-│   │   │   ├── RealNewsletterApplication.java   # Entry point
+│   │   │   ├── RealNewsletterApplication.java        # Entry point
 │   │   │   ├── config/
-│   │   │   │   ├── CorsConfig.java              # Profile-based CORS rules
-│   │   │   │   └── WebClientConfig.java         # Reactive WebClient bean
+│   │   │   │   ├── CorsConfig.java                   # Profile-based CORS rules
+│   │   │   │   ├── EnvironmentConfig.java            # Environment bean config
+│   │   │   │   ├── FlywayConfig.java                 # Dev-profile clean+migrate runner
+│   │   │   │   ├── NewsApiSchedulerProperties.java   # NewsAPI scheduler config props
+│   │   │   │   ├── NewsDataSchedulerProperties.java  # Newsdata scheduler config props
+│   │   │   │   ├── OpenApiConfig.java                # Swagger/OpenAPI configuration
+│   │   │   │   ├── RateLimitConfig.java              # Rate limit bean setup
+│   │   │   │   ├── RateLimitInterceptorImpl.java     # Rate limit interceptor
+│   │   │   │   ├── RateLimitProperties.java          # Rate limit config props
+│   │   │   │   └── WebClientConfig.java              # RestClient bean
 │   │   │   ├── controller/
-│   │   │   │   └── ArticleController.java       # REST + SSE endpoints
+│   │   │   │   └── ArticleController.java            # REST + SSE endpoints
 │   │   │   ├── dto/
-│   │   │   │   └── ArticleDto.java              # API response record
+│   │   │   │   └── ArticleDto.java                   # API response record
 │   │   │   ├── model/
-│   │   │   │   ├── Article.java                 # JPA entity
-│   │   │   │   └── NewArticleEvent.java         # Spring application event
+│   │   │   │   ├── Article.java                      # JPA entity
+│   │   │   │   └── NewArticleEvent.java              # Spring application event
 │   │   │   ├── repository/
-│   │   │   │   └── ArticleRepository.java       # Spring Data JPA repository
+│   │   │   │   └── ArticleRepository.java            # Spring Data JPA repository
+│   │   │   ├── scheduler/
+│   │   │   │   ├── IngestionScheduler.java           # Core ingestion orchestrator
+│   │   │   │   ├── KeepAliveScheduler.java           # DB keep-alive ping
+│   │   │   │   ├── NewsApiIngestionScheduler.java    # NewsAPI scheduled trigger
+│   │   │   │   └── NewsDataIngestionScheduler.java   # Newsdata.io scheduled trigger
 │   │   │   └── service/
-│   │   │       ├── AiEnhancementService.java    # GPT-4 summary + tag generation
-│   │   │       ├── ArticleStreamService.java    # SSE client registry + broadcaster
-│   │   │       ├── ExternalNewsClient.java      # NewsAPI WebClient integration
-│   │   │       └── IngestionService.java        # Scheduled ingestion orchestrator
+│   │   │       ├── AiEnhancementService.java         # GPT-4 summary + tag generation
+│   │   │       ├── ArticleStreamService.java         # SSE client registry + broadcaster
+│   │   │       ├── ExternalNewsClient.java           # Newsdata.io HTTP client
+│   │   │       └── NewsApiClient.java                # NewsAPI HTTP client
 │   │   └── resources/
-│   │       ├── application.yml                  # Main configuration
+│   │       ├── application.yml                       # Main configuration
+│   │       ├── application-dev.yml                   # Dev profile overrides
 │   │       └── db/migration/
-│   │           ├── V1__init_schema.sql          # Articles table
-│   │           └── V2__add_ai_fields.sql        # AI summary + tags columns
+│   │           ├── V1__init_schema.sql               # Articles table
+│   │           └── V2__add_ai_fields.sql             # AI summary + tags columns
 │   └── test/
 │       ├── java/com/realnewsletter/
 │       │   ├── RealNewsletterApplicationTests.java
@@ -414,14 +461,18 @@ real-newsletter/
 │       │   │   └── ArticleRepositoryTest.java
 │       │   └── service/
 │       │       ├── AiEnhancementServiceTest.java
+│       │       ├── ExternalNewsClientPaginatedTest.java
 │       │       ├── ExternalNewsClientTest.java
-│       │       └── IngestionServiceTest.java
+│       │       ├── IngestionServiceTest.java
+│       │       ├── NewsApiClientPaginatedTest.java
+│       │       ├── NewsApiIngestionSchedulerTest.java
+│       │       └── NewsDataIngestionSchedulerTest.java
 │       └── resources/
-│           └── application-test.yml             # H2 + Flyway-disabled config
+│           └── application-test.yml                  # H2 + Flyway-disabled config
 ├── Dockerfile
 ├── docker-compose.yml
 ├── pom.xml
-└── release-notes.md
+└── README.md
 ```
 
 ---
@@ -430,6 +481,8 @@ real-newsletter/
 
 | Version | Date | Summary |
 |---|---|---|
+| [v1.8.0](https://github.com/ravidsun/real-newsletter/releases/tag/v1.8.0) | 2026-04-17 | Upgrade to Spring Boot 4.0.0 + Spring AI 2.0.0-M2; fix Docker layer caching and libgcc dependency |
+| [v1.7.0](https://github.com/ravidsun/real-newsletter/releases/tag/v1.7.0) | — | Dual news source ingestion (Newsdata.io + NewsAPI) with rate limiting |
 | [v1.5.0](https://github.com/ravidsun/real-newsletter/releases/tag/v1.5.0) | 2026-04-11 | REST API, SSE streaming, CORS profiles |
 | v1.4.0 | — | AI enrichment pipeline (GPT-4 summaries + tags) |
 | v1.3.0 | — | Scheduled news ingestion with deduplication |

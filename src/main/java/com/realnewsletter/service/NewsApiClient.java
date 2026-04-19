@@ -4,6 +4,7 @@ import com.realnewsletter.model.NewsApiArticle;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Flux;
@@ -46,11 +47,17 @@ public class NewsApiClient {
         return webClient.get()
                 .uri(newsApiUrl + "?country=us&apiKey=" + newsApiKey)
                 .retrieve()
+                .onStatus(HttpStatus.TOO_MANY_REQUESTS::equals, response -> {
+                    logger.warn("NewsAPI rate limit reached (429) – skipping this cycle. "
+                            + "Free tier allows 100 requests/day; check scheduler.newsapi.cron.");
+                    return Mono.empty();
+                })
                 .onStatus(status -> !status.is2xxSuccessful(), response -> {
                     logger.error("Error fetching articles from NewsAPI: {}", response.statusCode());
                     return Mono.error(new RuntimeException("Failed to fetch articles from NewsAPI"));
                 })
                 .bodyToMono(NewsApiResponse.class)
+                .switchIfEmpty(Mono.just(new NewsApiResponse("rate-limited", 0, List.of())))
                 .flatMapMany(response -> Flux.fromIterable(response.articles()))
                 .take(2)
                 .map(this::mapToArticle);
@@ -83,11 +90,17 @@ public class NewsApiClient {
         return webClient.get()
                 .uri(url.toString())
                 .retrieve()
+                .onStatus(HttpStatus.TOO_MANY_REQUESTS::equals, response -> {
+                    logger.warn("[NewsApiClient] Rate limit reached (429) on page {} – "
+                            + "stopping pagination. Free tier: 100 requests/day.", page);
+                    return Mono.empty();
+                })
                 .onStatus(status -> !status.is2xxSuccessful(), response -> {
                     logger.error("Error fetching page {} from NewsAPI: {}", page, response.statusCode());
                     return Mono.error(new RuntimeException("Failed to fetch page from NewsAPI"));
                 })
-                .bodyToMono(NewsApiResponse.class);
+                .bodyToMono(NewsApiResponse.class)
+                .switchIfEmpty(Mono.just(new NewsApiResponse("rate-limited", 0, List.of())));
     }
 
     /** Maps a raw NewsAPI article record to a {@link NewsApiArticle} entity. */

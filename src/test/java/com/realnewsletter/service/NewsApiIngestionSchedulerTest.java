@@ -1,8 +1,10 @@
 package com.realnewsletter.service;
 
+import com.realnewsletter.scheduler.NewsApiIngestionScheduler;
 import com.realnewsletter.config.NewsApiSchedulerProperties;
 import com.realnewsletter.model.NewsApiArticle;
 import com.realnewsletter.repository.ArticleRepository;
+import com.realnewsletter.service.AiEnhancementService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -11,6 +13,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.springframework.context.ApplicationEventPublisher;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
@@ -25,6 +28,8 @@ class NewsApiIngestionSchedulerTest {
     @Mock private NewsApiSchedulerProperties props;
     @Mock private NewsApiClient newsApiClient;
     @Mock private ArticleRepository articleRepository;
+    @Mock private AiEnhancementService aiEnhancementService;
+    @Mock private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private NewsApiIngestionScheduler scheduler;
