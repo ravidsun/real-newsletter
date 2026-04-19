@@ -1,0 +1,91 @@
+# Local profile - for local development and testing
+server:
+  port: 8081  # Use 8081 to avoid port conflicts with other instances
+spring:
+  datasource:
+    # Local PostgreSQL - values loaded from environment variables
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/realnews}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:}
+    hikari:
+      maximum-pool-size: 3          # Lower pool size for local development (base uses 5)
+
+  jpa:
+    hibernate:
+      ddl-auto: validate  # Let Flyway own the schema; Hibernate only validates
+    show-sql: true  # Set to true if you want to see SQL queries
+    properties:
+      hibernate:
+        format_sql: true  # Pretty-print SQL (if show-sql is true)
+        use_sql_comments: true
+
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 0          # Baseline at 0 so ALL migrations V1+ are applied
+    schemas: public              # Explicitly target the public schema
+    locations: classpath:db/migration
+    clean-disabled: false        # Allows flyway:clean if called manually
+    out-of-order: false
+
+  ai:
+    openai:
+      api-key: ${GROQ_API_KEY:}
+
+external:
+  newsdata:
+    url: ${NEWSDATA_API_URL:https://newsdata.io/api/1/news}
+    key: ${NEWSDATA_API_KEY:}
+  newsapi:
+    url: ${NEWSAPI_URL:https://newsapi.org/v2/top-headlines}
+    key: ${NEWSAPI_KEY:}
+
+# Local scheduler settings - run less frequently
+scheduler:
+  newsdata:
+    enabled: false  # Disable scheduled jobs in local development
+    cron: '0 0 6 * * *'
+    max-requests: 1  # Only 1 request for testing
+    page-size: 1
+    country: us
+    language: en
+    category: general
+  newsapi:
+    enabled: false  # Disable scheduled jobs in local development
+    cron: '0 0 7 * * *'
+    max-requests: 1  # Only 1 request for testing
+    page-size: 1
+    country: us
+    language: en
+    category: general
+
+# Local app settings
+app:
+  keep-alive:
+    url: http://localhost:8081/actuator/health
+
+cors:
+  allowed-origins: http://localhost:4201,http://localhost:3000,http://localhost:8081
+  allowed-methods: GET,POST,PUT,DELETE,OPTIONS
+  max-age: 3600
+
+# Rate limiting - relaxed for local testing
+rate-limit:
+  enabled: false  # Disable rate limiting in local development
+  limit-for-period: 1000
+  limit-refresh-period-seconds: 60
+  timeout-duration-millis: 0
+  path-patterns:
+    - /api/**
+
+# Logging - more verbose for local debugging
+logging:
+  level:
+    com.realnewsletter: DEBUG
+    org.springframework: DEBUG
+    org.hibernate: DEBUG
+    root: info
+  pattern:
+    console: "%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+
+

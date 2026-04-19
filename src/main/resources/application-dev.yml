@@ -1,9 +1,8 @@
 # Development profile - only overrides for dev-specific settings
 spring:
   flyway:
-    baselineOnMigrate: false
-    cleanDisabled: false
-
+    # In dev, clean the schema before migration to ensure fresh state from migrations
+    clean-disabled: false
   ai:
     openai:
       api-key: ${GROQ_API_KEY:test-key-not-real}

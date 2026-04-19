@@ -1,6 +1,6 @@
 spring:
   profiles:
-    active: dev
+    active: ${SPRING_PROFILES_ACTIVE:dev}
   datasource:
     # Supabase Transaction Pooler JDBC URL (port 6543).
     # Loaded from DB_URL environment variable (via .env file).
@@ -9,8 +9,13 @@ spring:
     username: ${DB_USER:realnewsuser}
     password: ${DB_PASSWORD:postgres}
     hikari:
-      connection-timeout: 30000
       maximum-pool-size: 5
+      minimum-idle: 1
+      connection-timeout: 10000     # Fail fast after 10s
+      idle-timeout: 300000          # Release idle connections after 5 min
+      max-lifetime: 600000          # Recycle connections every 10 min
+      keepalive-time: 60000         # Send keepalive every 60s to prevent stale connections
+      connection-test-query: SELECT 1
       # Workaround for "prepared statement does not exist" errors with pgBouncer.
       data-source-properties:
         prepareThreshold: 0
@@ -18,14 +23,21 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: none
     show-sql: false
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
     properties:
       hibernate:
         default_schema: public
+        jdbc:
+          batch_size: 20
+          fetch_size: 50
 
   flyway:
     enabled: true
+    baseline-on-migrate: true
+    baseline-version: 0
+    connect-retries: 5            # Retry DB connection up to 5 times before failing
 
   ai:
     openai:
