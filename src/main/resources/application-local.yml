@@ -84,8 +84,8 @@ rate-limit:
 logging:
   level:
     com.realnewsletter: DEBUG
-    org.springframework: DEBUG
-    org.hibernate: DEBUG
+    org.springframework: INFO
+    org.hibernate: INFO
     root: info
   pattern:
     console: "%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"

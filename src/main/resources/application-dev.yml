@@ -1,5 +1,11 @@
 # Development profile - only overrides for dev-specific settings
 spring:
+  datasource:
+    hikari:
+      # Supabase/Render close idle connections after ~5 min; keep max-lifetime shorter
+      max-lifetime: 180000       # 3 minutes
+      keepalive-time: 60000      # send keepalive every 1 minute
+      connection-timeout: 30000
   flyway:
     # In dev, clean the schema before migration to ensure fresh state from migrations
     clean-disabled: false

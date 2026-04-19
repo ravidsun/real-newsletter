@@ -17,11 +17,9 @@ COPY src src
 RUN mvn -B clean package -DskipTests -q
 
 # ── Runtime image ────────────────────────────────────────────────────────────
-FROM eclipse-temurin:21-jre-alpine
-# libgcc is required by Netty's native QUIC/HTTP3 library (netty-codec-classes-quic)
-# which is pulled in transitively by Spring AI. Without it the JVM throws
-# UnsatisfiedLinkError: libgcc_s.so.1: No such file or directory at startup.
-RUN apk add --no-cache libgcc
+# Use jammy (Ubuntu/glibc) instead of Alpine (musl) because Netty's native
+# QUIC library (pulled in by Spring AI) requires glibc (ld-linux-x86-64.so.2).
+FROM eclipse-temurin:21-jre-jammy
 WORKDIR /app
 
 COPY --from=builder /workspace/target/real-newsletter-*.jar app.jar
