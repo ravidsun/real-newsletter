@@ -15,7 +15,7 @@ spring:
     hibernate:
       ddl-auto: validate  # Let Flyway own the schema; Hibernate only validates
     open-in-view: false           # Never hold a DB connection for the full HTTP request lifecycle
-    show-sql: true  # Set to true if you want to see SQL queries
+    show-sql: false  # Set to true if you want to see SQL queries
     properties:
       hibernate:
         format_sql: true  # Pretty-print SQL (if show-sql is true)
