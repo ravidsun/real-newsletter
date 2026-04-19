@@ -13,18 +13,18 @@ User:     postgres.cjzajtezmuehdytwbbxy
 
 ### `.env` (Sensitive - DO NOT COMMIT)
 ```dotenv
-SUPABASE_JDBC_URL=postgresql://postgres.cjzajtezmuehdytwbbxy:No12blame2512@aws-1-us-west-2.pooler.supabase.com:5432/postgres
-SUPABASE_DB_USER=postgres.cjzajtezmuehdytwbbxy
-SUPABASE_DB_PASSWORD=No12blame2512
+DB_URL=postgresql://postgres.cjzajtezmuehdytwbbxy:[password]@aws-1-us-west-2.pooler.supabase.com:5432/postgres
+DB_USER=postgres.cjzajtezmuehdytwbbxy
+DB_PASSWORD=
 ```
 
 ### `application.yml` (Checked into Git)
 ```yaml
 spring:
   datasource:
-    url: ${SUPABASE_JDBC_URL:jdbc:postgresql://localhost:5432/newsletter}
-    username: ${SUPABASE_DB_USER:postgres}
-    password: ${SUPABASE_DB_PASSWORD:postgres}
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/newsletter}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:postgres}
 ```
 
 ### `EnvironmentConfig.java` (Auto-loads .env)

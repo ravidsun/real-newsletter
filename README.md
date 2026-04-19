@@ -107,9 +107,9 @@ All secrets are supplied through environment variables. Copy the template below 
 
 ```bash
 # .env — fill in your values before running
-SUPABASE_JDBC_URL=jdbc:postgresql://db.<project-ref>.supabase.co:6543/postgres?sslmode=require
-SUPABASE_DB_USER=postgres
-SUPABASE_DB_PASSWORD=your-supabase-password
+DB_URL=jdbc:postgresql://db.<project-ref>.supabase.co:6543/postgres?sslmode=require
+DB_USER=postgres
+DB_PASSWORD=your-supabase-password
 
 NEWSDATA_API_URL=https://newsdata.io/api/1/news
 NEWSDATA_API_KEY=pub_your-newsdata-key
@@ -121,9 +121,9 @@ OPENAI_API_KEY=sk-...
 
 | Property | Default | Description |
 |---|---|---|
-| `spring.datasource.url` | *(required)* `$SUPABASE_JDBC_URL` | PostgreSQL JDBC connection string |
-| `spring.datasource.username` | *(required)* `$SUPABASE_DB_USER` | Database username |
-| `spring.datasource.password` | *(required)* `$SUPABASE_DB_PASSWORD` | Database password |
+| `spring.datasource.url` | *(required)* `$DB_URL` | PostgreSQL JDBC connection string |
+| `spring.datasource.username` | *(required)* `$DB_USER` | Database username |
+| `spring.datasource.password` | *(required)* `$DB_PASSWORD` | Database password |
 | `spring.ai.openai.api-key` | `$OPENAI_API_KEY` | OpenAI API key for GPT-4 enrichment |
 | `spring.ai.openai.chat.options.model` | `gpt-4` | OpenAI model name |
 | `external.news.api.url` | `$NEWSDATA_API_URL` (default: `https://newsdata.io/api/1/news`) | Newsdata.io articles endpoint |
@@ -142,9 +142,9 @@ git clone https://github.com/ravidsun/real-newsletter.git
 cd real-newsletter
 
 # 2. Export environment variables (or create a .env file and source it)
-export SUPABASE_JDBC_URL="jdbc:postgresql://..."
-export SUPABASE_DB_USER="postgres"
-export SUPABASE_DB_PASSWORD="your-password"
+export DB_URL="jdbc:postgresql://..."
+export DB_USER="postgres"
+export DB_PASSWORD="your-password"
 export NEWSDATA_API_URL="https://newsdata.io/api/1/news"
 export NEWSDATA_API_KEY="pub_your-newsdata-key"
 export OPENAI_API_KEY="sk-..."
