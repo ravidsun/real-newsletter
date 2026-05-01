@@ -93,23 +93,30 @@ public class FlywayConfig {
             log.info("Flyway: configuring migration (schemas={}, locations={}, baselineOnMigrate={}, baselineVersion={})",
                     schemas, locations, baselineOnMigrate, baselineVersion);
 
-            Flyway flyway = Flyway.configure()
-                    .dataSource(dataSource)
-                    .schemas(schemas)
-                    .locations(locations)
-                    .baselineOnMigrate(baselineOnMigrate)
-                    .baselineVersion(baselineVersion)
-                    .outOfOrder(outOfOrder)
-                    .load();
+            try {
+                Flyway flyway = Flyway.configure()
+                        .dataSource(dataSource)
+                        .schemas(schemas)
+                        .locations(locations)
+                        .baselineOnMigrate(baselineOnMigrate)
+                        .baselineVersion(baselineVersion)
+                        .outOfOrder(outOfOrder)
+                        .load();
 
-            log.info("Flyway: repairing schema history...");
-            flyway.repair();
+                log.info("Flyway: repairing schema history...");
+                flyway.repair();
 
-            log.info("Flyway: running migrations...");
-            var result = flyway.migrate();
+                log.info("Flyway: running migrations...");
+                var result = flyway.migrate();
 
-            log.info("Flyway: complete — {} migration(s) applied, target version: {}",
-                    result.migrationsExecuted, result.targetSchemaVersion);
+                log.info("Flyway: complete — {} migration(s) applied, target version: {}",
+                        result.migrationsExecuted, result.targetSchemaVersion);
+            } catch (Exception e) {
+                log.error("Flyway: failed to connect to database or execute migrations. " +
+                        "Please verify that DB_URL environment variable is set correctly. " +
+                        "Error: {}", e.getMessage(), e);
+                throw new RuntimeException("Flyway migration failed. Ensure DB_URL environment variable is set and database is accessible.", e);
+            }
         }
     }
 }
