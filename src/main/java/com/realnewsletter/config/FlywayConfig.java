@@ -12,6 +12,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import javax.sql.DataSource;
+import java.sql.Connection;
+import java.sql.SQLException;
 import java.util.Set;
 
 /**
@@ -42,10 +44,13 @@ public class FlywayConfig {
     @Value("${spring.flyway.out-of-order:false}")
     private boolean outOfOrder;
 
+    @Value("${spring.datasource.url}")
+    private String datasourceUrl;
+
     @Bean
     public FlywayMigrationRunner flywayMigrationRunner(DataSource dataSource) {
         return new FlywayMigrationRunner(dataSource, schemas, locations,
-                baselineOnMigrate, baselineVersion, outOfOrder);
+                baselineOnMigrate, baselineVersion, outOfOrder, datasourceUrl);
     }
 
     /**
@@ -77,23 +82,29 @@ public class FlywayConfig {
         private final boolean baselineOnMigrate;
         private final String baselineVersion;
         private final boolean outOfOrder;
+        private final String datasourceUrl;
 
         public FlywayMigrationRunner(DataSource dataSource, String schemas, String locations,
-                                     boolean baselineOnMigrate, String baselineVersion, boolean outOfOrder) {
+                                     boolean baselineOnMigrate, String baselineVersion, boolean outOfOrder, String datasourceUrl) {
             this.dataSource = dataSource;
             this.schemas = schemas;
             this.locations = locations;
             this.baselineOnMigrate = baselineOnMigrate;
             this.baselineVersion = baselineVersion;
             this.outOfOrder = outOfOrder;
+            this.datasourceUrl = datasourceUrl;
         }
 
         @Override
         public void afterPropertiesSet() {
             log.info("Flyway: configuring migration (schemas={}, locations={}, baselineOnMigrate={}, baselineVersion={})",
                     schemas, locations, baselineOnMigrate, baselineVersion);
+            log.info("Flyway: database URL: {}", maskPassword(datasourceUrl));
 
             try {
+                // Test the connection first to provide better error messages
+                testDatabaseConnection();
+
                 Flyway flyway = Flyway.configure()
                         .dataSource(dataSource)
                         .schemas(schemas)
@@ -111,12 +122,37 @@ public class FlywayConfig {
 
                 log.info("Flyway: complete — {} migration(s) applied, target version: {}",
                         result.migrationsExecuted, result.targetSchemaVersion);
+            } catch (SQLException e) {
+                String msg = "Flyway: database connection failed. " +
+                        "Please verify that the database is accessible and the connection string is correct.\n" +
+                        "Expected database URL format: " + maskPassword(datasourceUrl) + "\n" +
+                        "Connection error: " + e.getMessage();
+                log.error(msg, e);
+                throw new RuntimeException(msg, e);
             } catch (Exception e) {
-                log.error("Flyway: failed to connect to database or execute migrations. " +
-                        "Please verify that DB_URL environment variable is set correctly. " +
-                        "Error: {}", e.getMessage(), e);
-                throw new RuntimeException("Flyway migration failed. Ensure DB_URL environment variable is set and database is accessible.", e);
+                log.error("Flyway: failed to execute migrations. Error: {}", e.getMessage(), e);
+                throw new RuntimeException("Flyway migration failed. See logs for details.", e);
             }
+        }
+
+        /**
+         * Tests database connectivity with a simple query to provide better error diagnostics.
+         */
+        private void testDatabaseConnection() throws SQLException {
+            try (Connection conn = dataSource.getConnection()) {
+                conn.createStatement().execute("SELECT 1");
+                log.info("Flyway: database connection verified successfully");
+            } catch (SQLException e) {
+                log.error("Flyway: unable to connect to database using URL: {}", maskPassword(datasourceUrl));
+                throw e;
+            }
+        }
+
+        /**
+         * Masks the password in a JDBC URL for safe logging.
+         */
+        private static String maskPassword(String url) {
+            return url.replaceAll("(password=)[^&;]*", "$1***");
         }
     }
 }
