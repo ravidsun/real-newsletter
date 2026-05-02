@@ -5,7 +5,7 @@ spring:
     # Supabase Transaction Pooler JDBC URL (port 6543).
     # Loaded from DB_URL environment variable (via .env file).
     # Falls back to local PostgreSQL if environment variables are not set.
-    url: ${DB_URL:jdbc:postgresql://localhost:5432/realnews}
+    url: ${DB_URL:}
     username: ${DB_USER:realnewsuser}
     password: ${DB_PASSWORD:}
     hikari:
