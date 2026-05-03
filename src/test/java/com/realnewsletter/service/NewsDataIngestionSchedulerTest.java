@@ -136,6 +136,43 @@ class NewsDataIngestionSchedulerTest {
         verify(articleRepository, never()).save(any());
     }
 
+    @Test
+    void shouldStopAfterMaxRequests() {
+        // Every page always returns content and a next-page cursor → would loop forever without the cap
+        ExternalNewsClient.NewsdataArticleRaw raw = makeRaw("id1", "http://a.com/1");
+        ExternalNewsClient.NewsdataResponse pageWithMore =
+                new ExternalNewsClient.NewsdataResponse("ok", List.of(raw), "never-ending-token");
+
+        when(newsClient.fetchPage(any(), any(), any(), any(), anyInt()))
+                .thenReturn(Mono.just(pageWithMore));
+
+        NewsdataArticle article = new NewsdataArticle("http://a.com/1", "Title1", "body1");
+        when(newsClient.mapToArticle(raw)).thenReturn(article);
+        when(articleRepository.existsByLink(any())).thenReturn(false);
+
+        scheduler.runIngestion();
+
+        // maxRequests=3 (set in @BeforeEach) — must not exceed that even when pages are infinite
+        verify(newsClient, times(3)).fetchPage(any(), any(), any(), any(), anyInt());
+    }
+
+    @Test
+    void shouldSkipArticlesWithNullLink() {
+        ExternalNewsClient.NewsdataArticleRaw rawNullLink = makeRaw("id1", null);
+        ExternalNewsClient.NewsdataResponse page1 =
+                new ExternalNewsClient.NewsdataResponse("ok", List.of(rawNullLink), null);
+
+        when(newsClient.fetchPage(any(), any(), any(), isNull(), anyInt()))
+                .thenReturn(Mono.just(page1));
+
+        NewsdataArticle article = new NewsdataArticle(null, "Title", "body");
+        when(newsClient.mapToArticle(rawNullLink)).thenReturn(article);
+
+        scheduler.runIngestion();
+
+        verify(articleRepository, never()).save(any());
+    }
+
     private ExternalNewsClient.NewsdataArticleRaw makeRaw(String id, String link) {
         return new ExternalNewsClient.NewsdataArticleRaw(
                 id, "Title", link, "desc", "content",

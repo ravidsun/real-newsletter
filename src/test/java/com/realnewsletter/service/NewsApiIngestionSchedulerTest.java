@@ -138,6 +138,28 @@ class NewsApiIngestionSchedulerTest {
     }
 
     @Test
+    void shouldStopAfterMaxRequests() {
+        NewsApiClient.NewsApiArticleRaw raw = makeRaw("http://a.com/1", "T");
+
+        // Every page is full (pageSize=20) and totalResults is huge → would page forever without cap
+        List<NewsApiClient.NewsApiArticleRaw> fullPage = java.util.Collections.nCopies(20, raw);
+        NewsApiClient.NewsApiResponse pageWithMore =
+                new NewsApiClient.NewsApiResponse("ok", 10_000, fullPage);
+
+        when(newsApiClient.fetchPage(any(), any(), any(), anyInt(), anyInt()))
+                .thenReturn(Mono.just(pageWithMore));
+
+        NewsApiArticle article = new NewsApiArticle("http://a.com/1", "T", "b");
+        when(newsApiClient.mapToArticle(raw)).thenReturn(article);
+        when(articleRepository.existsByLink(any())).thenReturn(false);
+
+        scheduler.runIngestion();
+
+        // maxRequests=3 (set in @BeforeEach) — must stop after exactly 3 pages
+        verify(newsApiClient, times(3)).fetchPage(any(), any(), any(), anyInt(), anyInt());
+    }
+
+    @Test
     void shouldSkipArticlesWithNullLink() {
         NewsApiClient.NewsApiArticleRaw rawNullUrl = makeRaw(null, "Title null url");
 
