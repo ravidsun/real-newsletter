@@ -1,7 +1,9 @@
 package com.realnewsletter.model;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.Generated;
+import org.hibernate.annotations.UpdateTimestamp;
 import org.hibernate.generator.EventType;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -74,10 +76,22 @@ public abstract class Article {
     @Column(name = "title_hash", length = 64, unique = true)
     private String titleHash;
 
-    @Column(name = "created_at", updatable = false, insertable = false)
+    /**
+     * Set by Hibernate before INSERT; never updated afterwards.
+     * Using @CreationTimestamp instead of DB DEFAULT + insertable=false ensures
+     * the value is always present in the Java entity immediately after save.
+     */
+    @CreationTimestamp
+    @Column(name = "created_at", updatable = false)
     private Instant createdAt;
 
-    @Column(name = "updated_at", insertable = false)
+    /**
+     * Set by Hibernate before both INSERT and UPDATE.
+     * Using @UpdateTimestamp instead of DB DEFAULT + insertable=false ensures
+     * the value is always present in the Java entity immediately after save/update.
+     */
+    @UpdateTimestamp
+    @Column(name = "updated_at")
     private Instant updatedAt;
 
     public Article() {}
