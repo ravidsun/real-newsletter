@@ -1,5 +1,6 @@
 package com.realnewsletter.service;
 
+import com.realnewsletter.model.Article;
 import com.realnewsletter.model.NewsdataArticle;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
@@ -12,6 +13,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 
 import java.io.IOException;
+import java.time.Instant;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -97,11 +99,13 @@ class ExternalNewsClientPaginatedTest {
             "A description", "Full content",
             List.of("tech", "ai"), List.of("Author One"),
             "en", List.of("us"), List.of("technology"),
+            "news",                            // datatype
             "http://img.com/pic.jpg", null,
             "2026-04-17 06:00:00", "UTC", null,
             "src001", "Source Name", 5,
             "http://source.com", "http://source.com/icon.png",
-            "positive", null
+            "positive", null,
+            false                              // duplicate
         );
 
         NewsdataArticle article = externalNewsClient.mapToArticle(raw);
@@ -127,6 +131,10 @@ class ExternalNewsClientPaginatedTest {
         assertThat(article.getSentimentStats()).isNull();
         assertThat(article.getPubDateTz()).isEqualTo("UTC");
         assertThat(article.getDuplicate()).isFalse();
+        // fields fixed in mapping
+        assertThat(article.getPubDate()).isEqualTo(Instant.parse("2026-04-17T06:00:00Z"));
+        assertThat(article.getDatatype()).isEqualTo("news");
+        assertThat(article.getTitleHash()).isEqualTo(Article.computeTitleHash("My Title"));
     }
 
     @Test
@@ -135,12 +143,48 @@ class ExternalNewsClientPaginatedTest {
             "id2", "Title", "http://example.com/2",
             "Only description", null,
             null, null, "en", null, null,
+            null,                              // datatype
             null, null, null, null, null,
-            "s", "S", 1, "http://s.com", null, null, null
+            "s", "S", 1, "http://s.com", null, null, null,
+            null                               // duplicate
         );
 
         NewsdataArticle article = externalNewsClient.mapToArticle(raw);
         assertThat(article.getContent()).isEqualTo("Only description");
     }
-}
 
+    @Test
+    void mapToArticle_shouldParseFetchedAtDate() {
+        ExternalNewsClient.NewsdataArticleRaw raw = new ExternalNewsClient.NewsdataArticleRaw(
+            "id3", "Title", "http://example.com/3",
+            null, null,
+            null, null, "en", null, null,
+            null,
+            null, null,
+            "2026-05-03 09:57:00", "UTC", "2026-05-03 10:18:32",
+            "s", "S", 1, "http://s.com", null, null, null,
+            false
+        );
+
+        NewsdataArticle article = externalNewsClient.mapToArticle(raw);
+
+        assertThat(article.getPubDate()).isEqualTo(Instant.parse("2026-05-03T09:57:00Z"));
+        assertThat(article.getFetchedAt()).isEqualTo(Instant.parse("2026-05-03T10:18:32Z"));
+    }
+
+    @Test
+    void mapToArticle_shouldSetNullTitleHashWhenTitleIsNull() {
+        ExternalNewsClient.NewsdataArticleRaw raw = new ExternalNewsClient.NewsdataArticleRaw(
+            "id4", null, "http://example.com/4",
+            null, "body",
+            null, null, "en", null, null,
+            null, null, null, null, null, null,
+            "s", "S", 1, "http://s.com", null, null, null,
+            false
+        );
+
+        NewsdataArticle article = externalNewsClient.mapToArticle(raw);
+
+        assertThat(article.getTitleHash()).isNull();
+    }
+}

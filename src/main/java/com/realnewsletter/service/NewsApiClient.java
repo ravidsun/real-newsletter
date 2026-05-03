@@ -118,6 +118,7 @@ public class NewsApiClient {
                 logger.warn("Could not parse publishedAt: {}", a.publishedAt());
             }
         }
+        article.setTitleHash(NewsApiArticle.computeTitleHash(a.title()));
         return article;
     }
 

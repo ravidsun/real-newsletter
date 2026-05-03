@@ -5,16 +5,21 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.sql.init.dependency.AbstractBeansOfTypeDatabaseInitializerDetector;
-import org.springframework.boot.sql.init.dependency.DatabaseInitializerDetector;
+import org.springframework.beans.factory.config.BeanDefinition;
+import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
+import org.springframework.beans.factory.support.BeanDefinitionRegistry;
+import org.springframework.beans.factory.support.BeanDefinitionRegistryPostProcessor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+
 import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.SQLException;
-import java.util.Set;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 
 /**
  * Manual Flyway configuration for Spring Boot 4.0.
@@ -29,20 +34,29 @@ import java.util.Set;
 @ConditionalOnProperty(name = "spring.flyway.enabled", havingValue = "true", matchIfMissing = true)
 public class FlywayConfig {
 
-    @Value("${spring.flyway.schemas:public}")
+    // All values are resolved from the active profile's application-{profile}.yml,
+    // which merges on top of the base application.yml.  No hardcoded defaults here
+    // so the yml files are the single authoritative source of truth.
+    @Value("${spring.flyway.schemas}")
     private String schemas;
 
-    @Value("${spring.flyway.locations:classpath:db/migration}")
+    @Value("${spring.flyway.locations}")
     private String locations;
 
-    @Value("${spring.flyway.baseline-on-migrate:true}")
+    @Value("${spring.flyway.baseline-on-migrate}")
     private boolean baselineOnMigrate;
 
-    @Value("${spring.flyway.baseline-version:0}")
+    @Value("${spring.flyway.baseline-version}")
     private String baselineVersion;
 
-    @Value("${spring.flyway.out-of-order:false}")
+    @Value("${spring.flyway.out-of-order}")
     private boolean outOfOrder;
+
+    @Value("${spring.flyway.create-schemas}")
+    private boolean createSchemas;
+
+    @Value("${spring.flyway.connect-retries}")
+    private int connectRetries;
 
     @Value("${spring.datasource.url}")
     private String datasourceUrl;
@@ -50,20 +64,45 @@ public class FlywayConfig {
     @Bean
     public FlywayMigrationRunner flywayMigrationRunner(DataSource dataSource) {
         return new FlywayMigrationRunner(dataSource, schemas, locations,
-                baselineOnMigrate, baselineVersion, outOfOrder, datasourceUrl);
+                baselineOnMigrate, baselineVersion, outOfOrder, datasourceUrl,
+                createSchemas, connectRetries);
     }
 
     /**
-     * Registers FlywayMigrationRunner as a database initializer so that
-     * Spring Boot 4.0's JpaDependsOnDatabaseInitializationDetector makes
-     * the EntityManagerFactory depend on it.
+     * Forces the JPA EntityManagerFactory to depend on flywayMigrationRunner.
+     *
+     * Spring Boot 4.0 removed FlywayAutoConfiguration and the DatabaseInitializerDetector
+     * bean approach is unreliable when the DatabaseInitializationDependencyConfigurer
+     * is not loaded. This BeanDefinitionRegistryPostProcessor directly patches the
+     * entityManagerFactory bean definition to declare an explicit dependsOn, guaranteeing
+     * Flyway always runs and completes before Hibernate schema validation.
      */
     @Bean
-    public static DatabaseInitializerDetector flywayDatabaseInitializerDetector() {
-        return new AbstractBeansOfTypeDatabaseInitializerDetector() {
+    @SuppressWarnings("NullableProblems")
+    public static BeanDefinitionRegistryPostProcessor enforceFlywayBeforeJpa() {
+        return new BeanDefinitionRegistryPostProcessor() {
             @Override
-            protected Set<Class<?>> getDatabaseInitializerBeanTypes() {
-                return Set.of(FlywayMigrationRunner.class);
+            public void postProcessBeanDefinitionRegistry(BeanDefinitionRegistry registry) {
+                // Spring Boot registers the EMF under this name via HibernateJpaConfiguration
+                String[] emfCandidates = {"entityManagerFactory", "jpaSharedEM_entityManagerFactory"};
+                for (String beanName : emfCandidates) {
+                    if (registry.containsBeanDefinition(beanName)) {
+                        BeanDefinition def = registry.getBeanDefinition(beanName);
+                        String[] existing = def.getDependsOn();
+                        List<String> deps = existing != null
+                                ? new ArrayList<>(Arrays.asList(existing))
+                                : new ArrayList<>();
+                        if (!deps.contains("flywayMigrationRunner")) {
+                            deps.add("flywayMigrationRunner");
+                            def.setDependsOn(deps.toArray(new String[0]));
+                        }
+                    }
+                }
+            }
+
+            @Override
+            public void postProcessBeanFactory(ConfigurableListableBeanFactory beanFactory) {
+                // nothing — dependency wiring is done in postProcessBeanDefinitionRegistry
             }
         };
     }
@@ -83,9 +122,12 @@ public class FlywayConfig {
         private final String baselineVersion;
         private final boolean outOfOrder;
         private final String datasourceUrl;
+        private final boolean createSchemas;
+        private final int connectRetries;
 
         public FlywayMigrationRunner(DataSource dataSource, String schemas, String locations,
-                                     boolean baselineOnMigrate, String baselineVersion, boolean outOfOrder, String datasourceUrl) {
+                                     boolean baselineOnMigrate, String baselineVersion, boolean outOfOrder,
+                                     String datasourceUrl, boolean createSchemas, int connectRetries) {
             this.dataSource = dataSource;
             this.schemas = schemas;
             this.locations = locations;
@@ -93,6 +135,8 @@ public class FlywayConfig {
             this.baselineVersion = baselineVersion;
             this.outOfOrder = outOfOrder;
             this.datasourceUrl = datasourceUrl;
+            this.createSchemas = createSchemas;
+            this.connectRetries = connectRetries;
         }
 
         @Override
@@ -112,6 +156,8 @@ public class FlywayConfig {
                         .baselineOnMigrate(baselineOnMigrate)
                         .baselineVersion(baselineVersion)
                         .outOfOrder(outOfOrder)
+                        .createSchemas(createSchemas)
+                        .connectRetries(connectRetries)
                         .load();
 
                 log.info("Flyway: repairing schema history...");

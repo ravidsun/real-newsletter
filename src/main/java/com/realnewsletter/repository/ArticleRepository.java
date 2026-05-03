@@ -15,4 +15,6 @@ public interface ArticleRepository extends JpaRepository<Article, UUID>,
                                            JpaSpecificationExecutor<Article> {
 
     boolean existsByLink(String link);
+
+    boolean existsByTitleHash(String titleHash);
 }

@@ -3,11 +3,33 @@
 # docker-compose.yml – Real Newsletter local development stack
 #
 # Prerequisites:
-#   1. Copy .env.example → .env and fill in your Supabase credentials.
+#   1. Ensure .env.dev exists with the correct DB_URL (see .env.dev template).
 #   2. Run: docker compose up --build
+#
+# The `db` service automatically creates the `realnews-dev` database on first
+# start.  Flyway then runs V1-V5 migrations to create all tables inside it.
 # ---------------------------------------------------------------------------
 
 services:
+
+  # ── Local PostgreSQL (creates realnews-dev database automatically) ────────
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: No12blame2512
+      POSTGRES_DB: realnews-dev      # auto-created on first boot
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata-dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d realnews-dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── Spring Boot application ───────────────────────────────────────────────
   app:
     build:
       context: .
@@ -15,7 +37,18 @@ services:
     ports:
       - "8080:8080"
     env_file:
-      - .env
+      - .env.dev          # loads dev-specific DB URL, API keys, etc.
+    environment:
+      # Override DB_URL to point to the local `db` service instead of the
+      # remote IP so developers can work fully offline.
+      DB_URL: jdbc:postgresql://db:5432/realnews-dev?sslmode=disable
+      SPRING_PROFILES_ACTIVE: dev
+    depends_on:
+      db:
+        condition: service_healthy
     pull_policy: build
     restart: unless-stopped
+
+volumes:
+  pgdata-dev:
 

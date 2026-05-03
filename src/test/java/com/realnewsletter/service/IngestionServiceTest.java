@@ -115,9 +115,11 @@ class IngestionServiceTest {
         return new ExternalNewsClient.NewsdataArticleRaw(
                 null, title, link, null, content,
                 null, null, null, null, null,
+                null,                          // datatype
                 null, null, null, null, null,
                 null, null, null, null, null,
-                null, null
+                null, null,
+                null                           // duplicate
         );
     }
 }

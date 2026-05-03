@@ -112,4 +112,71 @@ class ArticleControllerTest {
         mockMvc.perform(get("/api/v1/articles/stream"))
                 .andExpect(request().asyncStarted());
     }
+
+    // ── Filter tests ────────────────────────────────────────────────────────────
+
+    @Test
+    void listArticles_shouldFilterByLanguage() throws Exception {
+        NewsdataArticle english = new NewsdataArticle("http://en.com", "English Article", "body");
+        english.setLanguage("english");
+        NewsdataArticle french = new NewsdataArticle("http://fr.com", "French Article", "body");
+        french.setLanguage("french");
+        articleRepository.save(english);
+        articleRepository.save(french);
+
+        mockMvc.perform(get("/api/v1/articles")
+                        .param("language", "english")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].link").value("http://en.com"));
+    }
+
+    @Test
+    void listArticles_shouldFilterByCategory() throws Exception {
+        NewsdataArticle sports = new NewsdataArticle("http://sports.com", "Sports Article", "body");
+        sports.setCategory("sports");
+        NewsdataArticle tech = new NewsdataArticle("http://tech.com", "Tech Article", "body");
+        tech.setCategory("technology");
+        articleRepository.save(sports);
+        articleRepository.save(tech);
+
+        mockMvc.perform(get("/api/v1/articles")
+                        .param("category", "sports")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].link").value("http://sports.com"));
+    }
+
+    @Test
+    void listArticles_shouldFilterByCountry() throws Exception {
+        NewsdataArticle us = new NewsdataArticle("http://us.com", "US Article", "body");
+        us.setCountry("united states of america");
+        NewsdataArticle uk = new NewsdataArticle("http://uk.com", "UK Article", "body");
+        uk.setCountry("united kingdom");
+        articleRepository.save(us);
+        articleRepository.save(uk);
+
+        mockMvc.perform(get("/api/v1/articles")
+                        .param("country", "united kingdom")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].link").value("http://uk.com"));
+    }
+
+    @Test
+    void listArticles_shouldReturnEmptyPageWhenOutOfBounds() throws Exception {
+        articleRepository.save(new NewsdataArticle("http://only.com", "Only Article", "body"));
+
+        // Page 5 is way beyond the data — should return empty content, not an error
+        mockMvc.perform(get("/api/v1/articles")
+                        .param("page", "5")
+                        .param("size", "10")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content", hasSize(0)))
+                .andExpect(jsonPath("$.page.totalElements").value(1));
+    }
 }

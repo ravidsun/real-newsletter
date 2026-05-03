@@ -36,9 +36,10 @@ spring:
 
   flyway:
     enabled: true
-    baseline-on-migrate: true
-    baseline-version: 0
-    connect-retries: 5            # Retry DB connection up to 5 times before failing
+    # ── Invariant across all environments ────────────────────────────────
+    locations: classpath:db/migration
+    schemas: public
+    # ── All other Flyway properties live in application-{profile}.yml ────
 
   ai:
     openai:
@@ -47,6 +48,22 @@ spring:
       chat:
         options:
           model: llama-3.1-8b-instant
+    retry:
+      # Retry on HTTP 429 (rate-limited) even though Spring AI classifies it as NonTransientAiException.
+      # Groq free tier: 30 RPM → suggest waiting ≥ 2 s before retrying.
+      max-attempts: 5
+      on-http-codes: 429
+      backoff:
+        initial-interval: 3000    # 3 s first retry (Groq asks for ≥ 2 s)
+        max-interval: 30000       # cap at 30 s
+        multiplier: 2.0           # 3 s → 6 s → 12 s → 24 s → 30 s
+
+# ── AI enrichment throttle ────────────────────────────────────────────────────
+# Minimum delay injected BEFORE each call to the AI API to avoid burst 429s.
+# Groq free tier (30 RPM) → set to 2100 ms.  Paid / higher-rate plans → set to 0.
+ai:
+  enrichment:
+    inter-call-delay-ms: 2100
 
 external:
   newsdata:
@@ -88,9 +105,7 @@ scheduler:
     # category: general   # Optional – omit to fetch all categories
 
 # ── Keep-alive self-ping (prevents Render free-tier spin-down) ────────────────
-app:
-  keep-alive:
-    url: ${KEEP_ALIVE_URL:https://real-newsletter.onrender.com/actuator/health}
+# URL is environment-specific – defined in application-{profile}.yml
 
 # ── CORS ─────────────────────────────────────────────────────────────────────
 # Override CORS_ALLOWED_ORIGINS env var on Render/prod to restrict origins, e.g.:

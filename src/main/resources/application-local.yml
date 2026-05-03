@@ -22,13 +22,14 @@ spring:
         use_sql_comments: true
 
   flyway:
-    enabled: true
-    baseline-on-migrate: true
-    baseline-version: 0          # Baseline at 0 so ALL migrations V1+ are applied
-    schemas: public              # Explicitly target the public schema
-    locations: classpath:db/migration
-    clean-disabled: false        # Allows flyway:clean if called manually
-    out-of-order: false
+    create-schemas: true          # Auto-create schema for a fresh local DB
+    baseline-on-migrate: true     # Safe to run against a pre-existing local DB
+    baseline-version: '0'         # Baseline at 0 → V1+ migrations are always applied
+    # Local dev: allow clean (wipe DB) and accept out-of-order migrations
+    clean-disabled: false
+    out-of-order: true
+    # Fail fast locally – the error will be immediately visible in the terminal
+    connect-retries: 3
 
   ai:
     openai:

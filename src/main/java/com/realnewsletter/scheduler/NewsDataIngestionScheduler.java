@@ -5,14 +5,12 @@ import com.realnewsletter.model.NewArticleEvent;
 import com.realnewsletter.model.NewsdataArticle;
 import com.realnewsletter.repository.ArticleRepository;
 import com.realnewsletter.service.AiEnhancementService;
-import com.realnewsletter.service.ExternalNewsClient;
-import org.slf4j.Logger;
+import com.realnewsletter.service.ExternalNewsClient;import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -49,10 +47,6 @@ public class NewsDataIngestionScheduler {
     }
 
     /**
-     * Entry point triggered by Spring's scheduling infrastructure.
-     * The cron expression is read from {@code scheduler.newsdata.cron}.
-     */
-    /**
      * Scheduled entry point — respects the {@code scheduler.newsdata.enabled} flag.
      * For manual/on-demand runs use {@link #runIngestionNow()} directly.
      */
@@ -68,8 +62,10 @@ public class NewsDataIngestionScheduler {
     /**
      * Executes the ingestion unconditionally (bypasses the enabled flag).
      * Called by {@link com.realnewsletter.controller.IngestionController} for manual triggers.
+     *
+     * @return {@link IngestionResult} containing counts of fetched/saved/skipped/errored articles
      */
-    public void runIngestionNow() {
+    public IngestionResult runIngestionNow() {
 
         logger.info("[NewsDataScheduler] Starting bulk ingestion from Newsdata.io "
                 + "(maxRequests={}, pageSize={}, country={}, language={}, category={})",
@@ -94,10 +90,9 @@ public class NewsDataIngestionScheduler {
                     break;
                 }
 
-                List<NewsdataArticle> articles = new ArrayList<>();
-                for (ExternalNewsClient.NewsdataArticleRaw raw : response.results()) {
-                    articles.add(newsClient.mapToArticle(raw));
-                }
+                List<NewsdataArticle> articles = response.results().stream()
+                        .map(newsClient::mapToArticle)
+                        .toList();
                 totalFetched += articles.size();
 
                 for (NewsdataArticle article : articles) {
@@ -107,7 +102,18 @@ public class NewsDataIngestionScheduler {
                         totalSkipped++;
                         continue;
                     }
+                    if (Boolean.TRUE.equals(article.getDuplicate())) {
+                        logger.debug("[NewsDataScheduler] Skipping API-flagged duplicate: {}",
+                                article.getLink());
+                        totalSkipped++;
+                        continue;
+                    }
                     if (articleRepository.existsByLink(article.getLink())) {
+                        totalSkipped++;
+                    } else if (article.getTitleHash() != null
+                               && articleRepository.existsByTitleHash(article.getTitleHash())) {
+                        logger.debug("[NewsDataScheduler] Skipping cross-source duplicate (title hash match): {}",
+                                article.getLink());
                         totalSkipped++;
                     } else {
                         try {
@@ -143,5 +149,6 @@ public class NewsDataIngestionScheduler {
 
         logger.info("[NewsDataScheduler] Run complete – fetched={}, saved={}, duplicatesSkipped={}, errors={}",
                 totalFetched, totalSaved, totalSkipped, errors);
+        return new IngestionResult(totalFetched, totalSaved, totalSkipped, errors);
     }
 }

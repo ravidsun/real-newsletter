@@ -17,6 +17,7 @@ An AI-powered news aggregation and delivery platform built with **Spring Boot 4*
 - [API Reference](#api-reference)
   - [GET /api/v1/articles](#get-apiv1articles)
   - [GET /api/v1/articles/stream](#get-apiv1articlesstream)
+  - [POST /api/v1/ingestion](#post-apiv1ingestion)
 - [Real-Time SSE Streaming](#real-time-sse-streaming)
 - [Database Schema](#database-schema)
 - [CORS Configuration](#cors-configuration)
@@ -31,12 +32,14 @@ An AI-powered news aggregation and delivery platform built with **Spring Boot 4*
 | Feature | Description |
 |---|---|
 | **Dual News Ingestion** | Scheduled jobs fetch the latest English/US news from both [Newsdata.io](https://newsdata.io) and [NewsAPI](https://newsapi.org) on configurable intervals. Duplicate articles (by URL) are automatically skipped. |
+| **Manual Ingestion** | `POST /api/v1/ingestion?source=newsdata\|newsapi\|all` triggers an immediate fetch and returns `IngestionResult` stats (`fetched`, `saved`, `skipped`, `errors`). |
 | **AI Enrichment** | Each new article is sent to OpenAI GPT-4 via Spring AI to generate a plain-text summary and a set of comma-separated tags. |
 | **Rate Limiting** | Per-source rate limiting prevents API quota exhaustion across both news providers. |
 | **Paginated REST API** | `GET /api/v1/articles` returns stored articles as a paginated JSON response, sorted by newest first. |
 | **Real-Time SSE Stream** | `GET /api/v1/articles/stream` opens a persistent Server-Sent Events connection. Every new article saved triggers a `new-article` event pushed to all connected clients instantly. |
 | **Profile-Based CORS** | Separate CORS policies for `development` (all origins allowed) and `production` (restricted to a configured frontend origin). |
-| **Database Migrations** | Flyway manages schema evolution automatically on startup. |
+| **Profile-Driven Config** | `application-{profile}.yml` files own all environment-specific settings (Flyway, connection pool, rate limits, logging). No hardcoded defaults in `@Value` annotations. |
+| **Database Migrations** | Flyway manages schema evolution automatically on startup with per-profile `create-schemas`, `clean-disabled`, and `connect-retries` settings. |
 | **Keep-Alive Scheduler** | A background job periodically pings the database to prevent idle connection drops on Supabase's connection pooler. |
 | **Actuator** | Spring Boot Actuator endpoints available for health and metrics monitoring. |
 | **OpenAPI / Swagger UI** | Auto-generated API docs available at `/swagger-ui.html`. |
@@ -295,6 +298,36 @@ source.onerror = () => {
 
 ---
 
+### `POST /api/v1/ingestion`
+
+Triggers an immediate news ingestion cycle and waits for it to complete before returning the result.
+
+**Query Parameters**
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `source` | string | `all` | Which source to ingest: `newsdata`, `newsapi`, or `all` |
+
+**Example Request**
+
+```bash
+curl -X POST "http://localhost:8080/api/v1/ingestion?source=all"
+```
+
+**Example Response**
+
+```json
+{
+  "status": "completed",
+  "source": "all",
+  "triggeredAt": "2026-05-03T14:00:00Z",
+  "newsdata": { "fetched": 10, "saved": 8, "skipped": 2, "errors": 0 },
+  "newsapi":   { "fetched": 15, "saved": 12, "skipped": 3, "errors": 0 }
+}
+```
+
+---
+
 ## Real-Time SSE Streaming
 
 ### How It Works
@@ -428,7 +461,8 @@ real-newsletter/
 │   │   │   │   ├── RateLimitProperties.java          # Rate limit config props
 │   │   │   │   └── WebClientConfig.java              # RestClient bean
 │   │   │   ├── controller/
-│   │   │   │   └── ArticleController.java            # REST + SSE endpoints
+│   │   │   │   ├── ArticleController.java            # REST + SSE endpoints
+│   │   │   │   └── IngestionController.java          # Manual ingestion trigger endpoint
 │   │   │   ├── dto/
 │   │   │   │   └── ArticleDto.java                   # API response record
 │   │   │   ├── model/
@@ -437,6 +471,7 @@ real-newsletter/
 │   │   │   ├── repository/
 │   │   │   │   └── ArticleRepository.java            # Spring Data JPA repository
 │   │   │   ├── scheduler/
+│   │   │   │   ├── IngestionResult.java              # Shared record: fetched/saved/skipped/errors
 │   │   │   │   ├── IngestionScheduler.java           # Core ingestion orchestrator
 │   │   │   │   ├── KeepAliveScheduler.java           # DB keep-alive ping
 │   │   │   │   ├── NewsApiIngestionScheduler.java    # NewsAPI scheduled trigger
@@ -447,8 +482,10 @@ real-newsletter/
 │   │   │       ├── ExternalNewsClient.java           # Newsdata.io HTTP client
 │   │   │       └── NewsApiClient.java                # NewsAPI HTTP client
 │   │   └── resources/
-│   │       ├── application.yml                       # Main configuration
-│   │       ├── application-dev.yml                   # Dev profile overrides
+│   │       ├── application.yml                       # Invariant defaults
+│   │       ├── application-local.yml                 # Local dev overrides
+│   │       ├── application-dev.yml                   # Dev environment overrides
+│   │       ├── application-prd.yml                   # Production overrides
 │   │       └── db/migration/
 │   │           ├── V1__init_schema.sql               # Articles table
 │   │           └── V2__add_ai_fields.sql             # AI summary + tags columns
@@ -481,6 +518,7 @@ real-newsletter/
 
 | Version | Date | Summary |
 |---|---|---|
+| [v2.0.0](https://github.com/ravidsun/real-newsletter/releases/tag/v2.0.0) | 2026-05-03 | Profile-driven Flyway configuration; manual ingestion endpoint with `IngestionResult` stats; 422 fix (null category default); JaCoCo 0.8.13 for Java 25 support; env-specific yml keys synced |
 | [v1.8.0](https://github.com/ravidsun/real-newsletter/releases/tag/v1.8.0) | 2026-04-17 | Upgrade to Spring Boot 4.0.0 + Spring AI 2.0.0-M2; fix Docker layer caching and libgcc dependency |
 | [v1.7.0](https://github.com/ravidsun/real-newsletter/releases/tag/v1.7.0) | — | Dual news source ingestion (Newsdata.io + NewsAPI) with rate limiting |
 | [v1.5.0](https://github.com/ravidsun/real-newsletter/releases/tag/v1.5.0) | 2026-04-11 | REST API, SSE streaming, CORS profiles |

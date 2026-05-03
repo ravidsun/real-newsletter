@@ -1,0 +1,61 @@
+# Production profile – strict, safe settings for the live environment
+spring:
+  datasource:
+    hikari:
+      # Production pool: more headroom, shorter max-lifetime to survive DB failovers
+      maximum-pool-size: 10
+      minimum-idle: 5
+      max-lifetime: 300000       # 5 minutes – recycle before DB's idle timeout
+      keepalive-time: 60000
+      connection-timeout: 10000  # Fail fast – don't queue requests if DB is down
+
+  flyway:
+    create-schemas: false         # Schema must already exist in prod – fail if missing
+    baseline-on-migrate: true     # Safe on first deployment against a pre-existing DB
+    baseline-version: '5'         # Baseline at 0 → V1+ migrations are always applied
+    # Production safety: NEVER allow flyway clean (would drop all data)
+    clean-disabled: true
+    # Strict sequential versioning – no hotfix branches jumping version numbers
+    out-of-order: false
+    # Give the production DB more time on cold-start / failover before aborting
+    connect-retries: 15
+
+  jpa:
+    hibernate:
+      ddl-auto: validate          # Validate schema matches entities; never mutate in prod
+    show-sql: false
+
+  ai:
+    openai:
+      api-key: ${GROQ_API_KEY}   # No fallback – must be supplied via CI/CD secrets
+
+external:
+  newsdata:
+    key: ${NEWSDATA_API_KEY}     # No fallback – must be supplied via CI/CD secrets
+  newsapi:
+    key: ${NEWSAPI_KEY}          # No fallback – must be supplied via CI/CD secrets
+
+# ── Rate limiting – tighter limits in production ──────────────────────────
+rate-limit:
+  enabled: true
+  limit-for-period: 60           # 60 requests per minute per IP (stricter than dev)
+  limit-refresh-period-seconds: 60
+  timeout-duration-millis: 0    # Fail immediately with 429
+
+# ── CORS – only the production frontend is allowed ────────────────────────
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS}  # Must be set explicitly; no wildcard fallback
+
+# ── Keep-alive self-ping ──────────────────────────────────────────────────
+app:
+  keep-alive:
+    url: ${KEEP_ALIVE_URL:https://real-newsletter.onrender.com/actuator/health}
+
+# ── Logging – minimal noise in prod ──────────────────────────────────────
+logging:
+  level:
+    com.realnewsletter: INFO
+    org.springframework: WARN
+    org.hibernate: WARN
+    org.flywaydb: INFO           # Keep Flyway migration results visible
+    root: WARN
