@@ -5,16 +5,21 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.sql.init.dependency.AbstractBeansOfTypeDatabaseInitializerDetector;
-import org.springframework.boot.sql.init.dependency.DatabaseInitializerDetector;
+import org.springframework.beans.factory.config.BeanDefinition;
+import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
+import org.springframework.beans.factory.support.BeanDefinitionRegistry;
+import org.springframework.beans.factory.support.BeanDefinitionRegistryPostProcessor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+
 import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.SQLException;
-import java.util.Set;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 
 /**
  * Manual Flyway configuration for Spring Boot 4.0.
@@ -64,16 +69,40 @@ public class FlywayConfig {
     }
 
     /**
-     * Registers FlywayMigrationRunner as a database initializer so that
-     * Spring Boot 4.0's JpaDependsOnDatabaseInitializationDetector makes
-     * the EntityManagerFactory depend on it.
+     * Forces the JPA EntityManagerFactory to depend on flywayMigrationRunner.
+     *
+     * Spring Boot 4.0 removed FlywayAutoConfiguration and the DatabaseInitializerDetector
+     * bean approach is unreliable when the DatabaseInitializationDependencyConfigurer
+     * is not loaded. This BeanDefinitionRegistryPostProcessor directly patches the
+     * entityManagerFactory bean definition to declare an explicit dependsOn, guaranteeing
+     * Flyway always runs and completes before Hibernate schema validation.
      */
     @Bean
-    public static DatabaseInitializerDetector flywayDatabaseInitializerDetector() {
-        return new AbstractBeansOfTypeDatabaseInitializerDetector() {
+    @SuppressWarnings("NullableProblems")
+    public static BeanDefinitionRegistryPostProcessor enforceFlywayBeforeJpa() {
+        return new BeanDefinitionRegistryPostProcessor() {
             @Override
-            protected Set<Class<?>> getDatabaseInitializerBeanTypes() {
-                return Set.of(FlywayMigrationRunner.class);
+            public void postProcessBeanDefinitionRegistry(BeanDefinitionRegistry registry) {
+                // Spring Boot registers the EMF under this name via HibernateJpaConfiguration
+                String[] emfCandidates = {"entityManagerFactory", "jpaSharedEM_entityManagerFactory"};
+                for (String beanName : emfCandidates) {
+                    if (registry.containsBeanDefinition(beanName)) {
+                        BeanDefinition def = registry.getBeanDefinition(beanName);
+                        String[] existing = def.getDependsOn();
+                        List<String> deps = existing != null
+                                ? new ArrayList<>(Arrays.asList(existing))
+                                : new ArrayList<>();
+                        if (!deps.contains("flywayMigrationRunner")) {
+                            deps.add("flywayMigrationRunner");
+                            def.setDependsOn(deps.toArray(new String[0]));
+                        }
+                    }
+                }
+            }
+
+            @Override
+            public void postProcessBeanFactory(ConfigurableListableBeanFactory beanFactory) {
+                // nothing — dependency wiring is done in postProcessBeanDefinitionRegistry
             }
         };
     }
