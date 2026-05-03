@@ -30,3 +30,8 @@ spring:
       - org.springframework.ai.autoconfigure.openai.OpenAiAutoConfiguration
       - org.springframework.ai.model.openai.autoconfigure.OpenAiAutoConfiguration
 
+# Disable AI enrichment throttle in tests — no real AI calls are made (ChatClient is mocked)
+ai:
+  enrichment:
+    inter-call-delay-ms: 0
+

@@ -48,6 +48,22 @@ spring:
       chat:
         options:
           model: llama-3.1-8b-instant
+    retry:
+      # Retry on HTTP 429 (rate-limited) even though Spring AI classifies it as NonTransientAiException.
+      # Groq free tier: 30 RPM → suggest waiting ≥ 2 s before retrying.
+      max-attempts: 5
+      on-http-codes: 429
+      backoff:
+        initial-interval: 3000    # 3 s first retry (Groq asks for ≥ 2 s)
+        max-interval: 30000       # cap at 30 s
+        multiplier: 2.0           # 3 s → 6 s → 12 s → 24 s → 30 s
+
+# ── AI enrichment throttle ────────────────────────────────────────────────────
+# Minimum delay injected BEFORE each call to the AI API to avoid burst 429s.
+# Groq free tier (30 RPM) → set to 2100 ms.  Paid / higher-rate plans → set to 0.
+ai:
+  enrichment:
+    inter-call-delay-ms: 2100
 
 external:
   newsdata:
