@@ -48,8 +48,9 @@ public class NewsDataSchedulerProperties {
     private String language = "en";
 
     /** News category filter (e.g. {@code general}, {@code business}, {@code technology}).
-     *  Leave {@code null} or omit from config to fetch all categories. */
-    private String category = "general";
+     *  Defaults to {@code null} – omitted from the request so all categories are fetched.
+     *  Set in application-{profile}.yml only when you need to narrow the results. */
+    private String category = null;
 
     // ----- getters & setters -----
 

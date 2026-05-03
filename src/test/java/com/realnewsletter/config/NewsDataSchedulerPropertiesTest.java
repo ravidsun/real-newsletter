@@ -2,8 +2,6 @@ package com.realnewsletter.config;
 
 import org.junit.jupiter.api.Test;
 
-import java.util.List;
-
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -21,7 +19,8 @@ class NewsDataSchedulerPropertiesTest {
         assertThat(props.getPageSize()).isEqualTo(10);
         assertThat(props.getCountry()).isEqualTo("us");
         assertThat(props.getLanguage()).isEqualTo("en");
-        assertThat(props.getCategory()).isEqualTo("general");
+        // category defaults to null so it is omitted from API requests (fetches all categories)
+        assertThat(props.getCategory()).isNull();
     }
 
     @Test

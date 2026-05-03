@@ -48,10 +48,6 @@ public class NewsApiIngestionScheduler {
     }
 
     /**
-     * Entry point triggered by Spring's scheduling infrastructure.
-     * The cron expression is read from {@code scheduler.newsapi.cron}.
-     */
-    /**
      * Scheduled entry point — respects the {@code scheduler.newsapi.enabled} flag.
      * For manual/on-demand runs use {@link #runIngestionNow()} directly.
      */
@@ -67,8 +63,10 @@ public class NewsApiIngestionScheduler {
     /**
      * Executes the ingestion unconditionally (bypasses the enabled flag).
      * Called by {@link com.realnewsletter.controller.IngestionController} for manual triggers.
+     *
+     * @return {@link IngestionResult} containing counts of fetched/saved/skipped/errored articles
      */
-    public void runIngestionNow() {
+    public IngestionResult runIngestionNow() {
 
         logger.info("[NewsApiScheduler] Starting bulk ingestion from NewsAPI.org "
                 + "(maxRequests={}, pageSize={}, country={}, language={}, category={})",
@@ -104,6 +102,8 @@ public class NewsApiIngestionScheduler {
 
                 for (NewsApiArticle article : articles) {
                     if (article.getLink() == null || article.getLink().isBlank()) {
+                        logger.warn("[NewsApiScheduler] Skipping article with null/blank link: title={}",
+                                article.getTitle());
                         totalSkipped++;
                         continue;
                     }
@@ -151,6 +151,6 @@ public class NewsApiIngestionScheduler {
 
         logger.info("[NewsApiScheduler] Run complete – fetched={}, saved={}, duplicatesSkipped={}, errors={}",
                 totalFetched, totalSaved, totalSkipped, errors);
+        return new IngestionResult(totalFetched, totalSaved, totalSkipped, errors);
     }
 }
-

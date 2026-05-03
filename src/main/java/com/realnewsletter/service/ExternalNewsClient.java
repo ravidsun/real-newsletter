@@ -12,7 +12,7 @@ import reactor.core.publisher.Mono;
 import java.util.List;
 
 /**
- * Client for fetching articles from the Newsdata.io API (https://newsdata.io).
+ * Client for fetching articles from the Newsdata.io API (<a href="https://newsdata.io">...</a>).
  */
 @Service
 public class ExternalNewsClient {
@@ -40,10 +40,17 @@ public class ExternalNewsClient {
         return webClient.get()
             .uri(articlesApiUrl + "?apikey=" + apiKey + "&language=en&country=us")
             .retrieve()
-            .onStatus(status -> !status.is2xxSuccessful(), response -> {
-                logger.error("Error fetching articles from Newsdata.io: {}", response.statusCode());
-                return Mono.error(new RuntimeException("Failed to fetch articles from Newsdata.io"));
-            })
+            .onStatus(status -> !status.is2xxSuccessful(), response ->
+                response.bodyToMono(String.class)
+                        .defaultIfEmpty("<empty body>")
+                        .flatMap(body -> {
+                            logger.error("Error fetching articles from Newsdata.io: {} | body: {}",
+                                    response.statusCode(), body);
+                            return Mono.error(new RuntimeException(
+                                    "Failed to fetch articles from Newsdata.io: "
+                                    + response.statusCode() + " – " + body));
+                        })
+            )
             .bodyToMono(NewsdataResponse.class)
             .flatMapMany(response -> Flux.fromIterable(response.results()))
             .take(2)
@@ -73,10 +80,17 @@ public class ExternalNewsClient {
         return webClient.get()
                 .uri(url.toString())
                 .retrieve()
-                .onStatus(status -> !status.is2xxSuccessful(), response -> {
-                    logger.error("Error fetching page from Newsdata.io: {}", response.statusCode());
-                    return Mono.error(new RuntimeException("Failed to fetch page from Newsdata.io"));
-                })
+                .onStatus(status -> !status.is2xxSuccessful(), response ->
+                    response.bodyToMono(String.class)
+                            .defaultIfEmpty("<empty body>")
+                            .flatMap(body -> {
+                                logger.error("Error fetching page from Newsdata.io: {} | URL: {} | body: {}",
+                                        response.statusCode(), url, body);
+                                return Mono.error(new RuntimeException(
+                                        "Failed to fetch page from Newsdata.io: "
+                                        + response.statusCode() + " – " + body));
+                            })
+                )
                 .bodyToMono(NewsdataResponse.class);
     }
 
