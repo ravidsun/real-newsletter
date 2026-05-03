@@ -9,6 +9,11 @@ import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 
 /**
@@ -94,6 +99,20 @@ public class ExternalNewsClient {
                 .bodyToMono(NewsdataResponse.class);
     }
 
+    private static final DateTimeFormatter NEWSDATA_DATE_FMT =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
+    /** Parses a Newsdata.io date string ("yyyy-MM-dd HH:mm:ss", always UTC) to an {@link Instant}. */
+    private Instant parseNewsdataDate(String raw) {
+        if (raw == null || raw.isBlank()) return null;
+        try {
+            return LocalDateTime.parse(raw, NEWSDATA_DATE_FMT).toInstant(ZoneOffset.UTC);
+        } catch (DateTimeParseException e) {
+            logger.warn("Could not parse Newsdata date '{}': {}", raw, e.getMessage());
+            return null;
+        }
+    }
+
     /** Maps a raw Newsdata.io article record to a {@link NewsdataArticle} entity. */
     public NewsdataArticle mapToArticle(NewsdataArticleRaw a) {
         NewsdataArticle article = new NewsdataArticle(a.link(), a.title(),
@@ -105,6 +124,7 @@ public class ExternalNewsClient {
         article.setLanguage(a.language());
         article.setCountry(a.countryAsString());
         article.setCategory(a.categoryAsString());
+        article.setDatatype(a.datatype());
         article.setImageUrl(a.image_url());
         article.setVideoUrl(a.video_url());
         article.setSourceId(a.source_id());
@@ -114,8 +134,11 @@ public class ExternalNewsClient {
         article.setSourceIcon(a.source_icon());
         article.setSentiment(a.sentiment());
         article.setSentimentStats(a.sentiment_stats());
+        article.setPubDate(parseNewsdataDate(a.pubDate()));
         article.setPubDateTz(a.pubDateTZ());
-        article.setDuplicate(false);
+        article.setFetchedAt(parseNewsdataDate(a.fetched_at()));
+        article.setDuplicate(Boolean.TRUE.equals(a.duplicate()));
+        article.setTitleHash(NewsdataArticle.computeTitleHash(a.title()));
         return article;
     }
 
@@ -136,6 +159,7 @@ public class ExternalNewsClient {
             String language,
             List<String> country,
             List<String> category,
+            String datatype,
             String image_url,
             String video_url,
             String pubDate,
@@ -147,7 +171,8 @@ public class ExternalNewsClient {
             String source_url,
             String source_icon,
             String sentiment,
-            String sentiment_stats
+            String sentiment_stats,
+            Boolean duplicate
     ) {
         String keywordsAsString() { return keywords != null ? String.join(",", keywords) : null; }
         String creatorAsString()  { return creator  != null ? String.join(",", creator)  : null; }

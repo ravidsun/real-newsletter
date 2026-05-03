@@ -52,7 +52,7 @@ class NewsDataIngestionSchedulerTest {
     }
 
     @Test
-    void shouldSaveNewArticlesAndSkipDuplicates() {
+    void shouldSaveNewArticlesAndSkipExistingByLink() {
         // First page has 2 articles, no next page
         ExternalNewsClient.NewsdataArticleRaw raw1 = makeRaw("id1", "http://a.com/1");
         ExternalNewsClient.NewsdataArticleRaw raw2 = makeRaw("id2", "http://a.com/2");
@@ -69,12 +69,36 @@ class NewsDataIngestionSchedulerTest {
         when(newsClient.mapToArticle(raw2)).thenReturn(article2);
 
         when(articleRepository.existsByLink("http://a.com/1")).thenReturn(false);
-        when(articleRepository.existsByLink("http://a.com/2")).thenReturn(true); // duplicate
+        when(articleRepository.existsByLink("http://a.com/2")).thenReturn(true); // already in DB
 
         scheduler.runIngestion();
 
         verify(articleRepository, times(1)).save(article1);
         verify(articleRepository, never()).save(article2);
+    }
+
+    @Test
+    void shouldSkipArticlesFlaggedAsDuplicateByApi() {
+        ExternalNewsClient.NewsdataArticleRaw raw1 = makeRaw("id1", "http://a.com/1");
+        ExternalNewsClient.NewsdataArticleRaw raw2 = makeRawDuplicate("id2", "http://a.com/2");
+
+        ExternalNewsClient.NewsdataResponse page1 =
+                new ExternalNewsClient.NewsdataResponse("ok", List.of(raw1, raw2), null);
+
+        when(newsClient.fetchPage(any(), any(), any(), isNull(), anyInt()))
+                .thenReturn(Mono.just(page1));
+
+        NewsdataArticle article1 = new NewsdataArticle("http://a.com/1", "Title1", "body1");
+        NewsdataArticle article2 = new NewsdataArticle("http://a.com/2", "Title2", "body2");
+        article2.setDuplicate(true);
+        when(newsClient.mapToArticle(raw1)).thenReturn(article1);
+        when(newsClient.mapToArticle(raw2)).thenReturn(article2);
+        when(articleRepository.existsByLink("http://a.com/1")).thenReturn(false);
+
+        scheduler.runIngestion();
+
+        verify(articleRepository, times(1)).save(article1);
+        verify(articleRepository, never()).save(article2); // API duplicate – must NOT be stored
     }
 
     @Test
@@ -116,8 +140,20 @@ class NewsDataIngestionSchedulerTest {
         return new ExternalNewsClient.NewsdataArticleRaw(
                 id, "Title", link, "desc", "content",
                 null, null, "en", null, null,
+                null,                          // datatype
                 null, null, null, null, null,
-                "src", "Source", 1, "http://src.com", null, null, null);
+                "src", "Source", 1, "http://src.com", null, null, null,
+                false);                        // duplicate = false
+    }
+
+    private ExternalNewsClient.NewsdataArticleRaw makeRawDuplicate(String id, String link) {
+        return new ExternalNewsClient.NewsdataArticleRaw(
+                id, "Title", link, "desc", "content",
+                null, null, "en", null, null,
+                null,                          // datatype
+                null, null, null, null, null,
+                "src", "Source", 1, "http://src.com", null, null, null,
+                true);                         // duplicate = true
     }
 }
 

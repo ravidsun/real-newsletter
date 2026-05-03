@@ -102,7 +102,18 @@ public class NewsDataIngestionScheduler {
                         totalSkipped++;
                         continue;
                     }
+                    if (Boolean.TRUE.equals(article.getDuplicate())) {
+                        logger.debug("[NewsDataScheduler] Skipping API-flagged duplicate: {}",
+                                article.getLink());
+                        totalSkipped++;
+                        continue;
+                    }
                     if (articleRepository.existsByLink(article.getLink())) {
+                        totalSkipped++;
+                    } else if (article.getTitleHash() != null
+                               && articleRepository.existsByTitleHash(article.getTitleHash())) {
+                        logger.debug("[NewsDataScheduler] Skipping cross-source duplicate (title hash match): {}",
+                                article.getLink());
                         totalSkipped++;
                     } else {
                         try {

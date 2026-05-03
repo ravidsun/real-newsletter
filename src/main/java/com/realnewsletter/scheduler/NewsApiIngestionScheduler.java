@@ -109,6 +109,11 @@ public class NewsApiIngestionScheduler {
                     }
                     if (articleRepository.existsByLink(article.getLink())) {
                         totalSkipped++;
+                    } else if (article.getTitleHash() != null
+                               && articleRepository.existsByTitleHash(article.getTitleHash())) {
+                        logger.debug("[NewsApiScheduler] Skipping cross-source duplicate (title hash match): {}",
+                                article.getLink());
+                        totalSkipped++;
                     } else {
                         try {
                             aiEnhancementService.enrichArticle(article);

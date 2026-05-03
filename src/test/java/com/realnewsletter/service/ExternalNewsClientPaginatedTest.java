@@ -97,11 +97,13 @@ class ExternalNewsClientPaginatedTest {
             "A description", "Full content",
             List.of("tech", "ai"), List.of("Author One"),
             "en", List.of("us"), List.of("technology"),
+            "news",                            // datatype
             "http://img.com/pic.jpg", null,
             "2026-04-17 06:00:00", "UTC", null,
             "src001", "Source Name", 5,
             "http://source.com", "http://source.com/icon.png",
-            "positive", null
+            "positive", null,
+            false                              // duplicate
         );
 
         NewsdataArticle article = externalNewsClient.mapToArticle(raw);
@@ -135,8 +137,10 @@ class ExternalNewsClientPaginatedTest {
             "id2", "Title", "http://example.com/2",
             "Only description", null,
             null, null, "en", null, null,
+            null,                              // datatype
             null, null, null, null, null,
-            "s", "S", 1, "http://s.com", null, null, null
+            "s", "S", 1, "http://s.com", null, null, null,
+            null                               // duplicate
         );
 
         NewsdataArticle article = externalNewsClient.mapToArticle(raw);
