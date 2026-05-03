@@ -1,4 +1,4 @@
-# Development profile - only overrides for dev-specific settings
+# Development profile – overrides for the remote dev DB (docker-compose / Render dev)
 spring:
   datasource:
     hikari:
@@ -6,9 +6,18 @@ spring:
       max-lifetime: 180000       # 3 minutes
       keepalive-time: 60000      # send keepalive every 1 minute
       connection-timeout: 30000
+
   flyway:
-    # In dev, clean the schema before migration to ensure fresh state from migrations
+    create-schemas: true          # Auto-create schema if the dev DB is freshly provisioned
+    baseline-on-migrate: true     # Safe to run against a pre-existing dev DB
+    baseline-version: '0'         # Baseline at 0 → V1+ migrations are always applied
+    # Allow schema wipe on dev so re-running migrations always starts from a clean slate
     clean-disabled: false
+    # Accept out-of-order migrations – useful when multiple branches add migrations in parallel
+    out-of-order: true
+    # Docker startup can be slow; give the DB more time before giving up
+    connect-retries: 10
+
   ai:
     openai:
       api-key: ${GROQ_API_KEY:test-key-not-real}
@@ -18,5 +27,4 @@ external:
     key: ${NEWSDATA_API_KEY:test-key}
   newsapi:
     key: ${NEWSAPI_KEY:}
-
 

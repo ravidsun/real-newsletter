@@ -29,20 +29,29 @@ import java.util.Set;
 @ConditionalOnProperty(name = "spring.flyway.enabled", havingValue = "true", matchIfMissing = true)
 public class FlywayConfig {
 
-    @Value("${spring.flyway.schemas:public}")
+    // All values are resolved from the active profile's application-{profile}.yml,
+    // which merges on top of the base application.yml.  No hardcoded defaults here
+    // so the yml files are the single authoritative source of truth.
+    @Value("${spring.flyway.schemas}")
     private String schemas;
 
-    @Value("${spring.flyway.locations:classpath:db/migration}")
+    @Value("${spring.flyway.locations}")
     private String locations;
 
-    @Value("${spring.flyway.baseline-on-migrate:true}")
+    @Value("${spring.flyway.baseline-on-migrate}")
     private boolean baselineOnMigrate;
 
-    @Value("${spring.flyway.baseline-version:0}")
+    @Value("${spring.flyway.baseline-version}")
     private String baselineVersion;
 
-    @Value("${spring.flyway.out-of-order:false}")
+    @Value("${spring.flyway.out-of-order}")
     private boolean outOfOrder;
+
+    @Value("${spring.flyway.create-schemas}")
+    private boolean createSchemas;
+
+    @Value("${spring.flyway.connect-retries}")
+    private int connectRetries;
 
     @Value("${spring.datasource.url}")
     private String datasourceUrl;
@@ -50,7 +59,8 @@ public class FlywayConfig {
     @Bean
     public FlywayMigrationRunner flywayMigrationRunner(DataSource dataSource) {
         return new FlywayMigrationRunner(dataSource, schemas, locations,
-                baselineOnMigrate, baselineVersion, outOfOrder, datasourceUrl);
+                baselineOnMigrate, baselineVersion, outOfOrder, datasourceUrl,
+                createSchemas, connectRetries);
     }
 
     /**
@@ -83,9 +93,12 @@ public class FlywayConfig {
         private final String baselineVersion;
         private final boolean outOfOrder;
         private final String datasourceUrl;
+        private final boolean createSchemas;
+        private final int connectRetries;
 
         public FlywayMigrationRunner(DataSource dataSource, String schemas, String locations,
-                                     boolean baselineOnMigrate, String baselineVersion, boolean outOfOrder, String datasourceUrl) {
+                                     boolean baselineOnMigrate, String baselineVersion, boolean outOfOrder,
+                                     String datasourceUrl, boolean createSchemas, int connectRetries) {
             this.dataSource = dataSource;
             this.schemas = schemas;
             this.locations = locations;
@@ -93,6 +106,8 @@ public class FlywayConfig {
             this.baselineVersion = baselineVersion;
             this.outOfOrder = outOfOrder;
             this.datasourceUrl = datasourceUrl;
+            this.createSchemas = createSchemas;
+            this.connectRetries = connectRetries;
         }
 
         @Override
@@ -112,6 +127,8 @@ public class FlywayConfig {
                         .baselineOnMigrate(baselineOnMigrate)
                         .baselineVersion(baselineVersion)
                         .outOfOrder(outOfOrder)
+                        .createSchemas(createSchemas)
+                        .connectRetries(connectRetries)
                         .load();
 
                 log.info("Flyway: repairing schema history...");

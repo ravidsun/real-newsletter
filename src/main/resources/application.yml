@@ -36,9 +36,10 @@ spring:
 
   flyway:
     enabled: true
-    baseline-on-migrate: true
-    baseline-version: 0
-    connect-retries: 5            # Retry DB connection up to 5 times before failing
+    # ── Invariant across all environments ────────────────────────────────
+    locations: classpath:db/migration
+    schemas: public
+    # ── All other Flyway properties live in application-{profile}.yml ────
 
   ai:
     openai:
