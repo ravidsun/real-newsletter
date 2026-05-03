@@ -59,4 +59,3 @@ logging:
     org.hibernate: WARN
     org.flywaydb: INFO           # Keep Flyway migration results visible
     root: WARN
-

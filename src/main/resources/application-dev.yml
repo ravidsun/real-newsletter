@@ -3,6 +3,8 @@ spring:
   datasource:
     hikari:
       # Supabase/Render close idle connections after ~5 min; keep max-lifetime shorter
+      maximum-pool-size: 5
+      minimum-idle: 2
       max-lifetime: 180000       # 3 minutes
       keepalive-time: 60000      # send keepalive every 1 minute
       connection-timeout: 30000
@@ -18,6 +20,11 @@ spring:
     # Docker startup can be slow; give the DB more time before giving up
     connect-retries: 10
 
+  jpa:
+    hibernate:
+      ddl-auto: validate          # Let Flyway own the schema; Hibernate only validates
+    show-sql: false
+
   ai:
     openai:
       api-key: ${GROQ_API_KEY:test-key-not-real}
@@ -28,3 +35,27 @@ external:
   newsapi:
     key: ${NEWSAPI_KEY:}
 
+# ── Rate limiting – relaxed for dev ──────────────────────────────────────────
+rate-limit:
+  enabled: true
+  limit-for-period: 200           # Higher than prod – allow heavier manual testing
+  limit-refresh-period-seconds: 60
+  timeout-duration-millis: 0
+
+# ── CORS – permissive for dev (all common local ports allowed) ────────────────
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:4200,http://localhost:4201,http://localhost:3000}
+
+# ── Keep-alive self-ping ──────────────────────────────────────────────────────
+app:
+  keep-alive:
+    url: ${KEEP_ALIVE_URL:}
+
+# ── Logging – verbose for dev debugging ──────────────────────────────────────
+logging:
+  level:
+    com.realnewsletter: DEBUG
+    org.springframework: INFO
+    org.hibernate: INFO
+    org.flywaydb: INFO
+    root: INFO
