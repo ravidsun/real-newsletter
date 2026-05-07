@@ -32,9 +32,9 @@ public class ArticleSpecification {
      * Returns a {@link Specification} that AND-combines whichever of
      * {@code country}, {@code language}, {@code category} are non-blank.
      * <p>
-     * Always excludes {@link ArticleStatus#DISABLED} articles from the result
-     * regardless of the other filter parameters.
-     * Passing all nulls/blanks returns every non-DISABLED article.
+     * Always excludes {@link ArticleStatus#DISABLED} and {@link ArticleStatus#ARCHIVED}
+     * articles from the public feed regardless of the other filter parameters.
+     * Passing all nulls/blanks returns every PUBLISHED article.
      */
     public static Specification<Article> withFilters(String country,
                                                      String language,
@@ -42,11 +42,40 @@ public class ArticleSpecification {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
 
-            // Always exclude DISABLED articles from the public feed
-            predicates.add(cb.notEqual(root.get("status"), ArticleStatus.DISABLED));
+            // Only show PUBLISHED articles on the public feed
+            predicates.add(cb.equal(root.get("status"), ArticleStatus.PUBLISHED));
 
             // These fields live on NewsdataArticle; treat() accesses them via
             // the same table (SINGLE_TABLE) and adds the discriminator condition.
+            Root<NewsdataArticle> nd = cb.treat(root, NewsdataArticle.class);
+
+            if (hasValue(country)) {
+                predicates.add(tokenLike(cb, nd.get("country"), country));
+            }
+            if (hasValue(language)) {
+                predicates.add(tokenLike(cb, nd.get("language"), language));
+            }
+            if (hasValue(category)) {
+                predicates.add(tokenLike(cb, nd.get("category"), category));
+            }
+
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
+    }
+
+    /**
+     * Returns a {@link Specification} that selects only {@link ArticleStatus#ARCHIVED} articles,
+     * optionally filtered by {@code country}, {@code language}, or {@code category}.
+     * Used by the public archive page.
+     */
+    public static Specification<Article> archivedWithFilters(String country,
+                                                             String language,
+                                                             String category) {
+        return (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+
+            predicates.add(cb.equal(root.get("status"), ArticleStatus.ARCHIVED));
+
             Root<NewsdataArticle> nd = cb.treat(root, NewsdataArticle.class);
 
             if (hasValue(country)) {

@@ -36,7 +36,7 @@ public class ArticleController {
 
     /**
      * Returns a paginated list of articles sorted by {@code createdAt} DESC by default.
-     * DISABLED articles are always excluded.
+     * Only PUBLISHED articles are returned — DISABLED and ARCHIVED are excluded.
      */
     @GetMapping
     public Page<ArticleDto> list(
@@ -47,6 +47,22 @@ public class ArticleController {
 
         return articleRepository
                 .findAll(ArticleSpecification.withFilters(country, language, category), pageable)
+                .map(ArticleDto::fromEntity);
+    }
+
+    /**
+     * Returns a paginated list of ARCHIVED articles (articles older than 7 days).
+     * Supports the same optional filters as the main feed.
+     */
+    @GetMapping("/archived")
+    public Page<ArticleDto> listArchived(
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable,
+            @RequestParam(required = false) String country,
+            @RequestParam(required = false) String language,
+            @RequestParam(required = false) String category) {
+
+        return articleRepository
+                .findAll(ArticleSpecification.archivedWithFilters(country, language, category), pageable)
                 .map(ArticleDto::fromEntity);
     }
 
