@@ -56,8 +56,7 @@ public interface ArticleRepository extends JpaRepository<Article, UUID>,
     @Query("SELECT a FROM Article a WHERE a.status = com.realnewsletter.model.ArticleStatus.PUBLISHED " +
            "AND (LOWER(a.title) LIKE LOWER(CONCAT('%', :query, '%')) " +
            "     OR LOWER(a.content) LIKE LOWER(CONCAT('%', :query, '%'))) " +
-           "AND (:category IS NULL OR LOWER(a.content) LIKE LOWER(CONCAT('%', :category, '%')) " +
-           "     OR LOWER(a.title) LIKE LOWER(CONCAT('%', :category, '%'))) " +
+           "AND (:category IS NULL OR LOWER(TREAT(a AS com.realnewsletter.model.NewsdataArticle).category) LIKE LOWER(CONCAT('%', :category, '%'))) " +
            "AND (:publishedAfter IS NULL OR a.pubDate >= :publishedAfter)")
     Page<Article> searchPublished(@Param("query")          String  query,
                                   @Param("category")       String  category,

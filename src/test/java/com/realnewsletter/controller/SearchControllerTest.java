@@ -100,14 +100,16 @@ class SearchControllerTest {
 
     @Test
     void search_shouldFilterByCategory() throws Exception {
-        NewsdataArticle sports = new NewsdataArticle("http://sp.com", "Sports Article about football", "football championship");
-        NewsdataArticle tech   = new NewsdataArticle("http://tc.com", "Technology Article about football", "football data analysis");
+        NewsdataArticle sports = new NewsdataArticle("http://sp.com", "Football Championship Results", "football championship");
+        sports.setCategory("sports");
+        NewsdataArticle tech   = new NewsdataArticle("http://tc.com", "Football Analytics Platform", "football data analysis");
+        tech.setCategory("technology");
         articleRepository.save(sports);
         articleRepository.save(tech);
 
         mockMvc.perform(get("/api/v1/search")
                         .param("query", "football")
-                        .param("category", "Sports Article")
+                        .param("category", "sports")
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.page.totalElements").value(1))
@@ -182,6 +184,34 @@ class SearchControllerTest {
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.page.totalElements").value(2));
+    }
+
+    @Test
+    void search_shouldFilterByDateRange_last90days() throws Exception {
+        NewsdataArticle withinRange = new NewsdataArticle("http://r90.com", "Technology Trends Review", "tech review quarterly");
+        withinRange.setPubDate(Instant.now().minus(45, ChronoUnit.DAYS));
+
+        NewsdataArticle outsideRange = new NewsdataArticle("http://o90.com", "Technology History Overview", "old tech history");
+        outsideRange.setPubDate(Instant.now().minus(120, ChronoUnit.DAYS));
+
+        articleRepository.save(withinRange);
+        articleRepository.save(outsideRange);
+
+        mockMvc.perform(get("/api/v1/search")
+                        .param("query", "technology")
+                        .param("dateRange", "last90days")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].link").value("http://r90.com"));
+    }
+
+    // ── Validation ───────────────────────────────────────────────────────────────
+
+    @Test
+    void search_shouldReturn400WhenQueryIsMissing() throws Exception {
+        mockMvc.perform(get("/api/v1/search").accept(MediaType.APPLICATION_JSON))
+               .andExpect(status().isBadRequest());
     }
 
     // ── Status filtering ─────────────────────────────────────────────────────────
