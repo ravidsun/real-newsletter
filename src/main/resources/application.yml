@@ -1,16 +1,21 @@
 spring:
   profiles:
-    active: dev
+    active: ${SPRING_PROFILES_ACTIVE:dev}
   datasource:
     # Supabase Transaction Pooler JDBC URL (port 6543).
-    # Loaded from SUPABASE_JDBC_URL environment variable (via .env file).
+    # Loaded from DB_URL environment variable (via .env file).
     # Falls back to local PostgreSQL if environment variables are not set.
-    url: ${SUPABASE_JDBC_URL:jdbc:postgresql://localhost:5432/newsletter}
-    username: ${SUPABASE_DB_USER:postgres}
-    password: ${SUPABASE_DB_PASSWORD:postgres}
+    url: ${DB_URL:}
+    username: ${DB_USER:realnewsuser}
+    password: ${DB_PASSWORD:}
     hikari:
-      connection-timeout: 30000
       maximum-pool-size: 5
+      minimum-idle: 5               # Keep all connections warm (fixed pool, no cold-start penalty)
+      connection-timeout: 10000     # Fail fast after 10s
+      idle-timeout: 300000          # Release idle connections after 5 min
+      max-lifetime: 600000          # Recycle connections every 10 min
+      keepalive-time: 60000         # Send keepalive every 60s to prevent stale connections
+      # DO NOT set connection-test-query — PostgreSQL JDBC4 uses native isValid() which is faster
       # Workaround for "prepared statement does not exist" errors with pgBouncer.
       data-source-properties:
         prepareThreshold: 0
@@ -18,14 +23,23 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: none
     show-sql: false
+    open-in-view: false           # Never hold a DB connection for the full HTTP request lifecycle
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
     properties:
       hibernate:
         default_schema: public
+        jdbc:
+          batch_size: 20
+          fetch_size: 50
 
   flyway:
     enabled: true
+    # ── Invariant across all environments ────────────────────────────────
+    locations: classpath:db/migration
+    schemas: public
+    # ── All other Flyway properties live in application-{profile}.yml ────
 
   ai:
     openai:
@@ -34,6 +48,22 @@ spring:
       chat:
         options:
           model: llama-3.1-8b-instant
+    retry:
+      # Retry on HTTP 429 (rate-limited) even though Spring AI classifies it as NonTransientAiException.
+      # Groq free tier: 30 RPM → suggest waiting ≥ 2 s before retrying.
+      max-attempts: 5
+      on-http-codes: 429
+      backoff:
+        initial-interval: 3000    # 3 s first retry (Groq asks for ≥ 2 s)
+        max-interval: 30000       # cap at 30 s
+        multiplier: 2.0           # 3 s → 6 s → 12 s → 24 s → 30 s
+
+# ── AI enrichment throttle ────────────────────────────────────────────────────
+# Minimum delay injected BEFORE each call to the AI API to avoid burst 429s.
+# Groq free tier (30 RPM) → set to 2100 ms.  Paid / higher-rate plans → set to 0.
+ai:
+  enrichment:
+    inter-call-delay-ms: 2100
 
 external:
   newsdata:
@@ -46,6 +76,44 @@ external:
 ingestion:
   interval:
     ms: 600000
+
+# ── Scheduled bulk ingestion jobs ─────────────────────────────────────────────
+scheduler:
+  newsdata:
+    enabled: true
+    # Cron expression: second minute hour day month weekday  (6 AM daily)
+    cron: '0 0 6 * * *'
+    # Maximum number of paginated API requests per run (each page = page-size articles)
+    max-requests: 100
+    # Number of articles requested per API call (Newsdata.io default/max is 10 on free tier)
+    page-size: 10
+    # Optional filters applied to every API request
+    country: us
+    language: en
+    # category: general   # Optional – omit to fetch all categories
+  newsapi:
+    enabled: true
+    # Cron expression: second minute hour day month weekday  (7 AM daily)
+    cron: '0 0 7 * * *'
+    # Maximum number of paginated API requests per run
+    max-requests: 50
+    # Number of articles per API call (NewsAPI free tier max = 100; set lower to stay within limits)
+    page-size: 20
+    # Optional filters applied to every API request
+    country: us
+    language: en
+    # category: general   # Optional – omit to fetch all categories
+
+# ── Keep-alive self-ping (prevents Render free-tier spin-down) ────────────────
+# URL is environment-specific – defined in application-{profile}.yml
+
+# ── CORS ─────────────────────────────────────────────────────────────────────
+# Override CORS_ALLOWED_ORIGINS env var on Render/prod to restrict origins, e.g.:
+#   CORS_ALLOWED_ORIGINS=https://my-frontend.vercel.app
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:4201,https://real-newsletter.onrender.com}
+  allowed-methods: GET,POST,PUT,DELETE,OPTIONS
+  max-age: 3600
 
 springdoc:
   swagger-ui:

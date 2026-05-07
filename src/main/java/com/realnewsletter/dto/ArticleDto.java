@@ -1,6 +1,7 @@
 package com.realnewsletter.dto;
 
 import com.realnewsletter.model.Article;
+import com.realnewsletter.model.ArticleStatus;
 import com.realnewsletter.model.NewsdataArticle;
 
 import java.time.Instant;
@@ -26,6 +27,7 @@ public record ArticleDto(
     String aiSummary,
     String aiTag,
     Instant createdAt,
+    ArticleStatus status,
     // Newsdata-specific (null for NewsAPI articles)
     String articleId,
     String keywords,
@@ -87,6 +89,7 @@ public record ArticleDto(
             article.getLink(), article.getTitle(), article.getDescription(), article.getContent(),
             article.getCreator(), article.getSourceId(), article.getSourceName(), article.getImageUrl(),
             article.getPubDate(), article.getAiSummary(), article.getAiTag(), article.getCreatedAt(),
+            article.getStatus(),
             articleId, keywords, language, country, category, datatype,
             pubDateTz, fetchedAt, videoUrl, sourcePriority, sourceUrl, sourceIcon,
             sentiment, sentimentStats, aiRegion, aiOrg, duplicate

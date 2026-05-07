@@ -29,7 +29,7 @@ class AiEnhancementServiceTest {
     @BeforeEach
     void setUp() {
         when(builder.build()).thenReturn(chatClient);
-        service = new AiEnhancementService(builder);
+        service = new AiEnhancementService(builder, 0L); // 0 = no delay in unit tests
     }
 
     @Test

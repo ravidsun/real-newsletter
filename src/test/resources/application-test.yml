@@ -4,6 +4,9 @@ spring:
     username: sa
     password:
     driver-class-name: org.h2.Driver
+    hikari:
+      maximum-pool-size: 2
+      minimum-idle: 2
 
   jpa:
     hibernate:
@@ -21,4 +24,14 @@ spring:
   ai:
     openai:
       api-key: test-dummy-key-not-real
+
+  autoconfigure:
+    exclude:
+      - org.springframework.ai.autoconfigure.openai.OpenAiAutoConfiguration
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiAutoConfiguration
+
+# Disable AI enrichment throttle in tests — no real AI calls are made (ChatClient is mocked)
+ai:
+  enrichment:
+    inter-call-delay-ms: 0
 
