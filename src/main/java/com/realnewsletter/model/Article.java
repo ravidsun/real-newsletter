@@ -77,6 +77,16 @@ public abstract class Article {
     private String titleHash;
 
     /**
+     * Lifecycle status of this article.
+     * Defaults to {@link ArticleStatus#PUBLISHED} on ingestion.
+     * Admins can set it to {@link ArticleStatus#DISABLED} to hide it from the public feed.
+     * The archiving scheduler moves old articles to {@link ArticleStatus#ARCHIVED}.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false, length = 20)
+    private ArticleStatus status = ArticleStatus.PUBLISHED;
+
+    /**
      * Set by Hibernate before INSERT; never updated afterwards.
      * Using @CreationTimestamp instead of DB DEFAULT + insertable=false ensures
      * the value is always present in the Java entity immediately after save.
@@ -149,6 +159,9 @@ public abstract class Article {
 
     public String getTitleHash() { return titleHash; }
     public void setTitleHash(String titleHash) { this.titleHash = titleHash; }
+
+    public ArticleStatus getStatus() { return status; }
+    public void setStatus(ArticleStatus status) { this.status = status; }
 
     /**
      * Computes a SHA-256 hex digest of the normalized title so that the same story
