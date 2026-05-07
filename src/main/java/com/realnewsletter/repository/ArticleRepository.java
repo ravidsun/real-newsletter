@@ -2,6 +2,8 @@ package com.realnewsletter.repository;
 
 import com.realnewsletter.model.Article;
 import com.realnewsletter.model.ArticleStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Modifying;
@@ -37,4 +39,28 @@ public interface ArticleRepository extends JpaRepository<Article, UUID>,
     int bulkUpdateStatus(@Param("currentStatus") ArticleStatus currentStatus,
                          @Param("newStatus")     ArticleStatus newStatus,
                          @Param("cutoff")        Instant        cutoff);
+
+    /**
+     * Full-text keyword search over PUBLISHED articles using case-insensitive LIKE on
+     * {@code title} and {@code content} fields. H2-compatible (no tsvector required).
+     *
+     * <p>Optionally narrows results by {@code category} and a {@code publishedAfter} cutoff
+     * (for dateRange filtering based on {@code pubDate}). Pass {@code null} for unset filters.</p>
+     *
+     * @param query          keyword to search (matched with {@code %query%} pattern)
+     * @param category       optional category token to match (exact substring in title or content)
+     * @param publishedAfter optional lower bound on {@code pubDate}; pass {@code null} to skip
+     * @param pageable       pagination and sort configuration
+     * @return page of matching PUBLISHED articles
+     */
+    @Query("SELECT a FROM Article a WHERE a.status = com.realnewsletter.model.ArticleStatus.PUBLISHED " +
+           "AND (LOWER(a.title) LIKE LOWER(CONCAT('%', :query, '%')) " +
+           "     OR LOWER(a.content) LIKE LOWER(CONCAT('%', :query, '%'))) " +
+           "AND (:category IS NULL OR LOWER(a.content) LIKE LOWER(CONCAT('%', :category, '%')) " +
+           "     OR LOWER(a.title) LIKE LOWER(CONCAT('%', :category, '%'))) " +
+           "AND (:publishedAfter IS NULL OR a.pubDate >= :publishedAfter)")
+    Page<Article> searchPublished(@Param("query")          String  query,
+                                  @Param("category")       String  category,
+                                  @Param("publishedAfter") Instant publishedAfter,
+                                  Pageable pageable);
 }
