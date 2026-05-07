@@ -1,6 +1,7 @@
 package com.realnewsletter.repository;
 
 import com.realnewsletter.model.Article;
+import com.realnewsletter.model.ArticleStatus;
 import com.realnewsletter.model.NewsdataArticle;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.Expression;
@@ -30,13 +31,19 @@ public class ArticleSpecification {
     /**
      * Returns a {@link Specification} that AND-combines whichever of
      * {@code country}, {@code language}, {@code category} are non-blank.
-     * Passing all nulls/blanks returns every article (no WHERE clause added).
+     * <p>
+     * Always excludes {@link ArticleStatus#DISABLED} articles from the result
+     * regardless of the other filter parameters.
+     * Passing all nulls/blanks returns every non-DISABLED article.
      */
     public static Specification<Article> withFilters(String country,
                                                      String language,
                                                      String category) {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
+
+            // Always exclude DISABLED articles from the public feed
+            predicates.add(cb.notEqual(root.get("status"), ArticleStatus.DISABLED));
 
             // These fields live on NewsdataArticle; treat() accesses them via
             // the same table (SINGLE_TABLE) and adds the discriminator condition.
@@ -52,9 +59,7 @@ public class ArticleSpecification {
                 predicates.add(tokenLike(cb, nd.get("category"), category));
             }
 
-            return predicates.isEmpty()
-                    ? cb.conjunction()               // no filter → match all
-                    : cb.and(predicates.toArray(new Predicate[0]));
+            return cb.and(predicates.toArray(new Predicate[0]));
         };
     }
 
