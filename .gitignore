@@ -38,3 +38,6 @@ build-output*.txt
 
 .env.dev
 .env.prd
+
+# Data exports
+articles.csv
