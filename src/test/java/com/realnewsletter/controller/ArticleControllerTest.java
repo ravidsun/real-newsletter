@@ -1,5 +1,6 @@
 package com.realnewsletter.controller;
 
+import com.realnewsletter.model.ArticleStatus;
 import com.realnewsletter.model.NewsdataArticle;
 import com.realnewsletter.repository.ArticleRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -178,5 +179,37 @@ class ArticleControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content", hasSize(0)))
                 .andExpect(jsonPath("$.page.totalElements").value(1));
+    }
+
+    // ── Archived endpoint tests ──────────────────────────────────────────────
+
+    @Test
+    void listArchived_shouldReturnOnlyArchivedArticles() throws Exception {
+        NewsdataArticle published = articleRepository.save(
+                new NewsdataArticle("http://pub.com", "Published", "body"));
+
+        NewsdataArticle archived = new NewsdataArticle("http://arch.com", "Archived", "body");
+        archived.setStatus(ArticleStatus.ARCHIVED);
+        articleRepository.save(archived);
+
+        mockMvc.perform(get("/api/v1/articles/archived").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].link", is("http://arch.com")));
+
+        // Public feed should NOT contain the archived article
+        mockMvc.perform(get("/api/v1/articles").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].link", is("http://pub.com")));
+    }
+
+    @Test
+    void listArchived_shouldReturnEmptyWhenNoArchivedArticles() throws Exception {
+        articleRepository.save(new NewsdataArticle("http://live.com", "Live", "body"));
+
+        mockMvc.perform(get("/api/v1/articles/archived").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page.totalElements").value(0));
     }
 }
