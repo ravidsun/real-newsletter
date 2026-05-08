@@ -1,11 +1,14 @@
 package com.realnewsletter.controller;
 
+import com.realnewsletter.dto.ArticleCreateRequest;
 import com.realnewsletter.dto.ArticleDto;
 import com.realnewsletter.dto.ArticleStatusUpdateRequest;
 import com.realnewsletter.model.Article;
+import com.realnewsletter.model.NewsdataArticle;
 import com.realnewsletter.repository.ArticleRepository;
 import com.realnewsletter.repository.ArticleSpecification;
 import com.realnewsletter.service.ArticleStreamService;
+import com.realnewsletter.service.HtmlSanitizerService;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -13,6 +16,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -20,6 +24,9 @@ import java.util.UUID;
 
 /**
  * REST controller exposing paginated article listing, admin management, and SSE streaming endpoints.
+ *
+ * <p>State-changing operations (POST, PUT, DELETE) require the {@code ADMIN} role.
+ * Read operations (GET) are publicly accessible.</p>
  */
 @RestController
 @RequestMapping("/api/v1/articles")
@@ -27,11 +34,14 @@ public class ArticleController {
 
     private final ArticleRepository articleRepository;
     private final ArticleStreamService articleStreamService;
+    private final HtmlSanitizerService htmlSanitizerService;
 
     public ArticleController(ArticleRepository articleRepository,
-                             ArticleStreamService articleStreamService) {
+                             ArticleStreamService articleStreamService,
+                             HtmlSanitizerService htmlSanitizerService) {
         this.articleRepository = articleRepository;
         this.articleStreamService = articleStreamService;
+        this.htmlSanitizerService = htmlSanitizerService;
     }
 
     /**
@@ -67,6 +77,31 @@ public class ArticleController {
     }
 
     /**
+     * Creates a new article (admin operation).
+     *
+     * <p>Rich-text fields ({@code title}, {@code description}, {@code content}) are
+     * sanitized through {@link HtmlSanitizerService} before persistence to prevent
+     * stored XSS attacks.</p>
+     *
+     * @param request body containing the new article fields
+     * @return 201 Created with the saved article DTO
+     */
+    @PostMapping
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<ArticleDto> createArticle(@Valid @RequestBody ArticleCreateRequest request) {
+        NewsdataArticle article = new NewsdataArticle(
+                request.link(),
+                htmlSanitizerService.sanitize(request.title()),
+                htmlSanitizerService.sanitize(request.content())
+        );
+        article.setDescription(htmlSanitizerService.sanitize(request.description()));
+        article.setCreator(request.creator());
+
+        Article saved = articleRepository.save(article);
+        return ResponseEntity.status(201).body(ArticleDto.fromEntity(saved));
+    }
+
+    /**
      * Updates the lifecycle status of an article (admin operation).
      * Allows enabling/disabling articles or changing to any {@link com.realnewsletter.model.ArticleStatus}.
      *
@@ -75,6 +110,7 @@ public class ArticleController {
      * @return 200 with updated article DTO, or 404 if not found
      */
     @PutMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ArticleDto> updateStatus(@PathVariable UUID id,
                                                    @Valid @RequestBody ArticleStatusUpdateRequest request) {
         return articleRepository.findById(id)
@@ -93,6 +129,7 @@ public class ArticleController {
      * @return 204 No Content on success, 404 if not found
      */
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> deleteArticle(@PathVariable UUID id) {
         if (!articleRepository.existsById(id)) {
             return ResponseEntity.notFound().build();

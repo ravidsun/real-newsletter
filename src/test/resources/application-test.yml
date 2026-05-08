@@ -35,3 +35,18 @@ ai:
   enrichment:
     inter-call-delay-ms: 0
 
+# ── CORS (test) ───────────────────────────────────────────────────────────────
+cors:
+  allowed-origins: http://localhost:4201
+  allowed-methods: GET,POST,PUT,DELETE,OPTIONS
+  max-age: 3600
+
+# ── Rate limiting (test) ──────────────────────────────────────────────────────
+# Keep Resilience4j enabled with very high limits so tests don't hit 429.
+rate-limit:
+  enabled: false
+
+# ── Bucket4j strict rate limiting (test) ─────────────────────────────────────
+# Disable by default; SecurityIntegrationTest enables it via @TestPropertySource.
+bucket4j-rate-limit:
+  enabled: false

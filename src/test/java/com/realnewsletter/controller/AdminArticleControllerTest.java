@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -20,6 +21,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.is;
+import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -44,13 +46,16 @@ class AdminArticleControllerTest {
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.webAppContextSetup(wac).build();
+        mockMvc = MockMvcBuilders.webAppContextSetup(wac)
+                .apply(springSecurity())
+                .build();
         articleRepository.deleteAll();
     }
 
     // ── PUT /{id} — Status update ──────────────────────────────────────────────
 
     @Test
+    @WithMockUser(roles = "ADMIN")
     void putArticle_shouldDisableArticle() throws Exception {
         NewsdataArticle article = articleRepository.save(
                 new NewsdataArticle("http://a.com", "Test Article", "body"));
@@ -68,6 +73,7 @@ class AdminArticleControllerTest {
     }
 
     @Test
+    @WithMockUser(roles = "ADMIN")
     void putArticle_shouldEnableDisabledArticle() throws Exception {
         NewsdataArticle article = new NewsdataArticle("http://b.com", "Disabled Article", "body");
         article.setStatus(ArticleStatus.DISABLED);
@@ -86,6 +92,7 @@ class AdminArticleControllerTest {
     }
 
     @Test
+    @WithMockUser(roles = "ADMIN")
     void putArticle_shouldReturn404ForNonExistentArticle() throws Exception {
         String body = objectMapper.writeValueAsString(Map.of("status", "DISABLED"));
 
@@ -96,6 +103,7 @@ class AdminArticleControllerTest {
     }
 
     @Test
+    @WithMockUser(roles = "ADMIN")
     void putArticle_shouldReturn400ForInvalidStatus() throws Exception {
         NewsdataArticle article = articleRepository.save(
                 new NewsdataArticle("http://c.com", "Valid Article", "body"));
@@ -111,6 +119,7 @@ class AdminArticleControllerTest {
     // ── DELETE /{id} ───────────────────────────────────────────────────────────
 
     @Test
+    @WithMockUser(roles = "ADMIN")
     void deleteArticle_shouldReturn204AndRemoveFromDb() throws Exception {
         NewsdataArticle article = articleRepository.save(
                 new NewsdataArticle("http://d.com", "To Delete", "body"));
@@ -122,6 +131,7 @@ class AdminArticleControllerTest {
     }
 
     @Test
+    @WithMockUser(roles = "ADMIN")
     void deleteArticle_shouldReturn404ForNonExistentArticle() throws Exception {
         mockMvc.perform(delete("/api/v1/articles/" + UUID.randomUUID()))
                 .andExpect(status().isNotFound());
