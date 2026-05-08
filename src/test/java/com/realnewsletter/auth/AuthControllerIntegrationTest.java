@@ -45,6 +45,9 @@ class AuthControllerIntegrationTest {
 
     private final ObjectMapper objectMapper = JsonMapper.builder().build();
 
+    @Autowired
+    private JwtService jwtService;
+
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders.webAppContextSetup(wac)
@@ -209,6 +212,44 @@ class AuthControllerIntegrationTest {
         mockMvc.perform(post("/api/auth/refresh")
                         .cookie(new jakarta.servlet.http.Cookie("refresh_token", refreshToken)))
                 .andExpect(status().isUnauthorized());
+    }
+
+    // ── Admin role preservation after refresh ──────────────────────────────────
+
+    @Test
+    @DisplayName("POST /api/auth/refresh for admin user → new access token preserves ROLE_ADMIN")
+    void refresh_adminUser_preservesRoleAdminInNewAccessToken() throws Exception {
+        // Step 1: Login as admin
+        String loginBody = objectMapper.writeValueAsString(new LoginRequest("admin", "admin"));
+        MvcResult loginResult = mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(loginBody))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        String loginAccessToken = objectMapper.readTree(
+                loginResult.getResponse().getContentAsString()).get("accessToken").asText();
+        // Verify the login token itself carries ROLE_ADMIN
+        assertThat(jwtService.extractRoles(loginAccessToken)).contains("ROLE_ADMIN");
+
+        String setCookieHeader = loginResult.getResponse().getHeader("Set-Cookie");
+        String refreshToken = extractCookieValue(setCookieHeader, "refresh_token");
+
+        // Step 2: Use the refresh token to obtain a new access token
+        MvcResult refreshResult = mockMvc.perform(post("/api/auth/refresh")
+                        .cookie(new jakarta.servlet.http.Cookie("refresh_token", refreshToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").isNotEmpty())
+                .andReturn();
+
+        String newAccessToken = objectMapper.readTree(
+                refreshResult.getResponse().getContentAsString()).get("accessToken").asText();
+
+        // Step 3: Verify the refreshed access token still contains ROLE_ADMIN
+        String rolesAfterRefresh = jwtService.extractRoles(newAccessToken);
+        assertThat(rolesAfterRefresh)
+                .as("Refreshed access token must preserve ROLE_ADMIN for admin user")
+                .contains("ROLE_ADMIN");
     }
 
     // ── Helper ─────────────────────────────────────────────────────────────────

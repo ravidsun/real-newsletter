@@ -13,6 +13,8 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -42,15 +44,18 @@ public class AuthController {
     private final JwtService jwtService;
     private final RefreshTokenStore refreshTokenStore;
     private final JwtProperties jwtProperties;
+    private final UserDetailsService userDetailsService;
 
     public AuthController(AuthenticationManager authManager,
                           JwtService jwtService,
                           RefreshTokenStore refreshTokenStore,
-                          JwtProperties jwtProperties) {
+                          JwtProperties jwtProperties,
+                          UserDetailsService userDetailsService) {
         this.authManager = authManager;
         this.jwtService = jwtService;
         this.refreshTokenStore = refreshTokenStore;
         this.jwtProperties = jwtProperties;
+        this.userDetailsService = userDetailsService;
     }
 
     /**
@@ -102,6 +107,10 @@ public class AuthController {
      * one is issued on each successful call, limiting the window of exposure if a token
      * is ever intercepted.</p>
      *
+     * <p>Roles are re-derived from {@link UserDetailsService#loadUserByUsername(String)} on
+     * every refresh so that privilege changes (e.g. promoting a user to admin) take effect
+     * within one refresh cycle rather than waiting for the next full login.</p>
+     *
      * @param request  the HTTP request (used to read the refresh token cookie)
      * @param response the HTTP response (used to set the new refresh token cookie)
      * @return {@link LoginResponse} containing a new access token
@@ -127,9 +136,13 @@ public class AuthController {
         String newRefreshToken = refreshTokenStore.createToken(username);
         addRefreshTokenCookie(response, newRefreshToken);
 
-        // Issue new access token (re-use roles claim from old token if available,
-        // else default to ROLE_USER since we can't re-derive roles without a DB lookup here)
-        String newAccessToken = jwtService.generateAccessToken(username, "ROLE_USER");
+        // Load user from UserDetailsService to derive the real granted authorities,
+        // so that admin users retain ROLE_ADMIN (and any other roles) after token refresh.
+        UserDetails userDetails = userDetailsService.loadUserByUsername(username);
+        String roles = userDetails.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .collect(Collectors.joining(","));
+        String newAccessToken = jwtService.generateAccessToken(username, roles);
 
         log.info("Access token refreshed for user '{}'", username);
         return ResponseEntity.ok(new LoginResponse(
