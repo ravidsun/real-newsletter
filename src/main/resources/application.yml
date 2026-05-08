@@ -134,3 +134,17 @@ rate-limit:
   # URL path patterns the limiter is applied to
   path-patterns:
     - /api/**
+
+# ── Bucket4j strict rate limiting on auth & search endpoints ─────────────────
+# Applies a separate token-bucket limiter (via Bucket4jRateLimitInterceptor) to:
+#   /api/auth/**   – future authentication endpoints (login, register, refresh)
+#   /api/v1/search – keyword/semantic search (abuse-prone endpoint)
+bucket4j-rate-limit:
+  enabled: true
+  # Burst capacity: maximum requests allowed before any refill is needed
+  capacity: 20
+  # Tokens added to the bucket per refill window
+  refill-tokens: 20
+  # Length of the refill window in seconds
+  refill-period-seconds: 60
+
