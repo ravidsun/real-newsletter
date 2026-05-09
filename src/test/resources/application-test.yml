@@ -50,3 +50,17 @@ rate-limit:
 # Disable by default; SecurityIntegrationTest enables it via @TestPropertySource.
 bucket4j-rate-limit:
   enabled: false
+
+# ── JWT (test) ────────────────────────────────────────────────────────────────
+jwt:
+  secret: test-secret-key-for-unit-tests-only-32chars!
+  access-token-ttl-minutes: 15
+  refresh-token-ttl-days: 7
+  refresh-cookie-name: refresh_token
+
+auth:
+  admin:
+    username: admin
+    password: admin
+    password-hash:
+
