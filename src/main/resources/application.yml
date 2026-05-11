@@ -134,3 +134,33 @@ rate-limit:
   # URL path patterns the limiter is applied to
   path-patterns:
     - /api/**
+
+# ── JWT authentication ────────────────────────────────────────────────────────
+# Override jwt.secret (min 32 chars) via JWT_SECRET env var in production.
+# Override auth.admin.password-hash with a BCrypt hash via AUTH_ADMIN_PASSWORD_HASH.
+jwt:
+  secret: ${JWT_SECRET:changeme-replace-in-production-min-32chars!!}
+  access-token-ttl-minutes: 15
+  refresh-token-ttl-days: 7
+  refresh-cookie-name: refresh_token
+
+auth:
+  admin:
+    username: ${AUTH_ADMIN_USERNAME:admin}
+    # Provide BCrypt hash for production; plain-text fallback for dev only
+    password-hash: ${AUTH_ADMIN_PASSWORD_HASH:}
+    password: ${AUTH_ADMIN_PASSWORD:admin}
+
+# ── Bucket4j strict rate limiting on auth & search endpoints ─────────────────
+# Applies a separate token-bucket limiter (via Bucket4jRateLimitInterceptor) to:
+#   /api/auth/**   – future authentication endpoints (login, register, refresh)
+#   /api/v1/search – keyword/semantic search (abuse-prone endpoint)
+bucket4j-rate-limit:
+  enabled: true
+  # Burst capacity: maximum requests allowed before any refill is needed
+  capacity: 20
+  # Tokens added to the bucket per refill window
+  refill-tokens: 20
+  # Length of the refill window in seconds
+  refill-period-seconds: 60
+

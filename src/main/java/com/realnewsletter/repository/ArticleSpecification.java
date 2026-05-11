@@ -1,6 +1,7 @@
 package com.realnewsletter.repository;
 
 import com.realnewsletter.model.Article;
+import com.realnewsletter.model.ArticleStatus;
 import com.realnewsletter.model.NewsdataArticle;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.Expression;
@@ -30,13 +31,19 @@ public class ArticleSpecification {
     /**
      * Returns a {@link Specification} that AND-combines whichever of
      * {@code country}, {@code language}, {@code category} are non-blank.
-     * Passing all nulls/blanks returns every article (no WHERE clause added).
+     * <p>
+     * Always excludes {@link ArticleStatus#DISABLED} and {@link ArticleStatus#ARCHIVED}
+     * articles from the public feed regardless of the other filter parameters.
+     * Passing all nulls/blanks returns every PUBLISHED article.
      */
     public static Specification<Article> withFilters(String country,
                                                      String language,
                                                      String category) {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
+
+            // Only show PUBLISHED articles on the public feed
+            predicates.add(cb.equal(root.get("status"), ArticleStatus.PUBLISHED));
 
             // These fields live on NewsdataArticle; treat() accesses them via
             // the same table (SINGLE_TABLE) and adds the discriminator condition.
@@ -52,9 +59,36 @@ public class ArticleSpecification {
                 predicates.add(tokenLike(cb, nd.get("category"), category));
             }
 
-            return predicates.isEmpty()
-                    ? cb.conjunction()               // no filter → match all
-                    : cb.and(predicates.toArray(new Predicate[0]));
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
+    }
+
+    /**
+     * Returns a {@link Specification} that selects only {@link ArticleStatus#ARCHIVED} articles,
+     * optionally filtered by {@code country}, {@code language}, or {@code category}.
+     * Used by the public archive page.
+     */
+    public static Specification<Article> archivedWithFilters(String country,
+                                                             String language,
+                                                             String category) {
+        return (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+
+            predicates.add(cb.equal(root.get("status"), ArticleStatus.ARCHIVED));
+
+            Root<NewsdataArticle> nd = cb.treat(root, NewsdataArticle.class);
+
+            if (hasValue(country)) {
+                predicates.add(tokenLike(cb, nd.get("country"), country));
+            }
+            if (hasValue(language)) {
+                predicates.add(tokenLike(cb, nd.get("language"), language));
+            }
+            if (hasValue(category)) {
+                predicates.add(tokenLike(cb, nd.get("category"), category));
+            }
+
+            return cb.and(predicates.toArray(new Predicate[0]));
         };
     }
 

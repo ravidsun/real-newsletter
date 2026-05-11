@@ -68,9 +68,13 @@ Planner ──→ Coder ──→ Reviewer ────────────�
  (Plan)    (Build)  (Review+Merge*)   ↘ Test* ──→ Reviewer
                                        (Coverage) (Merge)
 
-* Reviewer merges the PR directly when coverage ≥ 30%.
+* Reviewer merges the PR directly into `develop` when coverage ≥ 30%.
   When coverage < 30%, Reviewer defers merge: routes to Test agent first,
   then Test hands back to Reviewer for merge before DevOps.
+
+> **Branch Strategy:**  `feature/*` → `develop` (automated, via this pipeline)
+>                        `develop` → `main` (manual, production promotion)
+> `main` is kept clean as the production-only branch. All agent work targets `develop`.
 ```
 
 Each agent records its start/end time. The pipeline tracks and reports **⏱️ duration per agent and per issue**.
@@ -186,7 +190,7 @@ Creates three linked implementation issues with clear scope, acceptance criteria
 
 1. Reads the implementation issue
 2. Analyzes the existing codebase
-3. Creates a feature branch `feature/issue-43`
+3. Creates a feature branch `feature/issue-43` from `develop`
 4. Implements production-quality code:
    - Spring Boot entities, repositories, services
    - REST controllers with proper HTTP methods/status codes
@@ -716,7 +720,17 @@ All agent definitions are located in `.github/agents/`:
 
 GitHub Actions workflows are located in `.github/workflows/`:
 - `agent-pipeline.yml` — Automated pipeline trigger via `run-pipeline` label or `workflow_dispatch`
+- `github-agent-pipeline.yml` — Full cloud pipeline (no IDE required); targets `develop` branch
 - `cleanup-feature-branches.yml` — **Automatic branch cleanup** — deletes feature branches after PR merge (see **Feature Branch Closure** section above)
+
+> **Branch Strategy:**
+> | Branch | Purpose | How changes land |
+> |--------|---------|-----------------|
+> | `feature/*` | Active development | Created from `develop`; merged into `develop` via PR after review |
+> | `develop` | Integration branch | All agent-pipeline work targets here; auto-updated by the pipeline |
+> | `main` | Production | Manual promotion only — `develop` → `main` is a human gate |
+>
+> The agent pipeline **never touches `main`** — that promotion is intentionally manual so production releases are fully controlled.
 
 Each file contains complete agent configuration, responsibilities, rules, failure handling, and output format.
 
