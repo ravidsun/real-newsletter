@@ -21,7 +21,7 @@ mcp-servers:
       - list_comments
 handoffs:
   - to: "devops"
-    when: "PR has been merged into main. Coverage ≥ 30% (Test agent was skipped) OR the Test agent already raised coverage to ≥ 70%. Pass the merge commit SHA, PR number, and review cycle number."
+    when: "PR has been merged into develop. Coverage ≥ 30% (Test agent was skipped) OR the Test agent already raised coverage to ≥ 70%. Pass the merge commit SHA, PR number, and review cycle number."
   - to: "test"
     when: "PR is approved AND coverage < 30% (or no JaCoCo report). Do NOT merge yet — feature branch must stay active for the Test agent. Pass PR number, coverage %, and cycle number."
   - to: "coder"
@@ -61,7 +61,7 @@ You are responsible for code review, architecture validation, and approval decis
 13. Submit a GitHub review — either **APPROVE** or **REQUEST_CHANGES** — with detailed inline and summary comments.
 14. **If APPROVED — decide merge vs. route:**
     - **Coverage ≥ 30%** (or receiving post-Test handoff with coverage ≥ 70%):
-      1. Merge the PR into `main` using squash-and-merge:
+      1. Merge the PR into `develop` using squash-and-merge:
          ```bash
          gh pr merge {pr_number} --squash --delete-branch
          ```
@@ -87,7 +87,7 @@ You are responsible for code review, architecture validation, and approval decis
 - Verify the PR description contains the Coder's build summary (Maven SUCCESS + tests + coverage %). If it is absent, request the Coder update the PR description before proceeding.
 - If changes are requested, provide a clear list of required fixes before re-review.
 - **The Reviewer is responsible for merging the PR** — DevOps never merges; it only deploys.
-- **If APPROVED — coverage ≥ 30%:** Merge the PR immediately, then hand off to DevOps.
+- **If APPROVED — coverage ≥ 30%:** Merge the PR immediately into `develop`, then hand off to DevOps.
 - **If APPROVED — coverage < 30% or no report:** Do NOT merge. Hand off to the Test agent with the PR number, coverage %, and cycle number. Merge happens after the Test agent hands back.
 - **If receiving post-Test handoff:** Merge the PR (no re-review needed), then hand off to DevOps.
 - **Review cycle limit:** The reviewer → coder → reviewer cycle must not repeat more than **3 times**. Always include the current cycle number in the handoff to the coder.
@@ -239,7 +239,7 @@ Use this structure:
 - [x] Criterion 2 — verified via code inspection + Coder build summary
 
 ## Merge
-- PR #N merged into `main` via squash-and-merge ✅ (commit: `abc1234`)
+- PR #N merged into `develop` via squash-and-merge ✅ (commit: `abc1234`)
 (or: Merge deferred — coverage N% < 30%, routing to Test agent first. Merge will occur after Test completes.)
 
 ## Review Cycle
@@ -257,3 +257,6 @@ PR merged (commit: `abc1234`). Coverage {N}% ≥ 30% — routing to DevOps.
 (or: Changes requested — Review cycle N of 3. Handing off to coder with the following required fixes: ...)
 (or: ⛔ Maximum review cycles (3) reached. Escalating to planner. Unresolved issues: ...)
 ```
+
+> **Branch Strategy:** PRs merge into `develop`. The `main` branch is reserved for production releases only — promotion from `develop` to `main` is a manual step performed outside the pipeline.
+

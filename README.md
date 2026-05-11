@@ -514,6 +514,41 @@ real-newsletter/
 
 ---
 
+## Branching Strategy
+
+This project uses a **`develop`-first** workflow to keep production (`main`) stable:
+
+| Branch | Purpose | How changes land |
+|--------|---------|-----------------|
+| `feature/*` | Individual feature / bug-fix work | Branched from `develop`; merged into `develop` via PR after agent-pipeline review |
+| `develop` | Integration / staging branch | All automated agent pipeline work targets here |
+| `main` | Production branch | **Manual promotion only** — a human must merge `develop` → `main` before a production release |
+
+### How the Agent Pipeline Fits In
+
+```
+GitHub Issue
+     │
+     ▼
+[Pipeline Agent]  Planner → Coder → Reviewer → Test* → DevOps
+                                       │
+                   feature/* ──────────► develop  (automated)
+                                                         │
+                                       develop ─────────► main  (manual gate)
+```
+
+- Feature branches are created from `develop` and merged back into `develop` on review approval.
+- The **DevOps agent** builds and releases from `develop` — it never touches `main`.
+- Promoting `develop` → `main` is a deliberate, human-controlled step. Run it when you are ready to go to production:
+
+```bash
+git checkout main
+git merge --no-ff develop -m "chore: promote develop → main for vX.Y.Z release"
+git push origin main
+```
+
+---
+
 ## Release History
 
 | Version | Date | Summary |

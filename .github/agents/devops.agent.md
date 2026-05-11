@@ -57,14 +57,14 @@ The Pipeline orchestrator invokes you with a **batch** of one or more merged PRs
 }
 ```
 
-All PRs in the batch are **already merged into `main`** before you run. Your job is to produce **one** deployment artifact, **one** version bump, **one** GitHub release, and close **every** issue in the batch.
+All PRs in the batch are **already merged into `develop`** before you run. Your job is to produce **one** deployment artifact, **one** version bump, **one** GitHub release, and close **every** issue in the batch.
 
 ---
 
 ## Responsibilities
 
-1. **Confirm the batch.** Verify every `mergeCommitSha` in the batch is reachable from `main` (`git merge-base --is-ancestor`). If any SHA is missing, halt and report which item is missing.
-2. **Pull latest `main`.** `git checkout main && git pull origin main`.
+1. **Confirm the batch.** Verify every `mergeCommitSha` in the batch is reachable from `develop` (`git merge-base --is-ancestor`). If any SHA is missing, halt and report which item is missing.
+2. **Pull latest `develop`.** `git checkout develop && git pull origin develop`.
 3. **Run the production Maven build** (`./mvnw clean package -DskipTests`) to generate the deployable artifact. One build covers the entire batch.
 4. **Build a Docker image** if a `Dockerfile` is present; tag it with the new version and `latest`.
 5. **Execute the deployment pipeline:** staging first, then production after staging verification.
@@ -82,7 +82,7 @@ All PRs in the batch are **already merged into `main`** before you run. Your job
 ## Rules
 
 - All PRs in the batch are merged before this agent runs — never attempt to merge again.
-- One build, one version bump, one release per batch invocation — never create multiple releases for the same batch.
+- **Branch strategy:** Feature branches merge into `develop`. The `main` branch is reserved for production-only releases. After creating the GitHub release from `develop`, the promotion of `develop` → `main` is a **manual step** performed by the team outside the pipeline. Do NOT push or merge into `main` automatically.- One build, one version bump, one release per batch invocation — never create multiple releases for the same batch.
 - If the batch contains only one issue, behaviour is identical — still one release, one version bump.
 - Maintain comprehensive deployment logs for audit and debugging.
 - Deploy to staging before production; never skip staging verification.
@@ -128,7 +128,7 @@ Never leave the system in an unknown state. On any failure: (1) stop the current
 
 ### Specific Failures
 
-**One or more merge commit SHAs not reachable from `main`**
+**One or more merge commit SHAs not reachable from `develop`**
 1. Run `git merge-base --is-ancestor {sha} HEAD` for each SHA and list which ones fail.
 2. Post the Error Report identifying the missing commits.
 3. Halt — do not deploy a partial batch.

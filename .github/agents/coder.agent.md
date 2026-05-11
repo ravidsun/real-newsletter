@@ -70,10 +70,10 @@ You are responsible for implementing code changes for the current repository.
 
 4. **Create Feature Branch**:
    ```bash
-   git pull origin main
+   git pull origin develop
    git checkout -b feature/issue-{number}
    ```
-   Pull latest main branch, create and checkout feature branch with consistent naming.
+   Pull latest develop branch, create and checkout feature branch with consistent naming.
 
 5. **Implement Code Changes**:
    - Check for a Dockerfile and `docker-compose.yml` at the repository root and add sensible defaults before any other work when either is absent.
@@ -125,7 +125,7 @@ You are responsible for implementing code changes for the current repository.
    - Maven build: SUCCESS
    - Tests: {N} passed / {N} failed
    - Coverage: {coveragePct}% (line)
-   " --base main --head feature/issue-{number}
+   " --base develop --head feature/issue-{number}
    ```
    Create PR linking to implementation issue and describing changes.
 
@@ -281,7 +281,7 @@ Use this structure:
 ```markdown
 ## Git Workflow
 - Feature branch: `feature/issue-{number}`
-- Base branch: `main` (pulled latest before creating feature branch)
+- Base branch: `develop` (pulled latest before creating feature branch)
 - Commits:
   - `git commit -m "feat: initial implementation (closes #{number})"`
   - `git commit -m "feat: add unit tests for feature"`
