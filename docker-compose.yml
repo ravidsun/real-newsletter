@@ -21,9 +21,12 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_DB: realnews-dev      # auto-created on first boot
-    ports:
-      - "5432:5432"
+      POSTGRES_DB: realnews-dev
+    # Port 5432 is intentionally NOT exposed to the host.
+    # The app container reaches db via Docker's internal network.
+    # Expose only if you need direct access from the host for debugging:
+    # ports:
+    #   - "5433:5432"   # use 5433 to avoid conflicts with a host-level postgres
     volumes:
       - pgdata-dev:/var/lib/postgresql/data
     healthcheck:
@@ -31,6 +34,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    restart: unless-stopped
 
   # ── Spring Boot application ───────────────────────────────────────────────
   app:

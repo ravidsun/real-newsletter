@@ -19,6 +19,11 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: realnews
+    # Port 5432 is intentionally NOT exposed to the host.
+    # The app container reaches db via Docker's internal network.
+    # Expose only if you need direct access from the host for debugging:
+    # ports:
+    #   - "5433:5432"   # use 5433 to avoid conflicts with a host-level postgres
     volumes:
       - pgdata-prod:/var/lib/postgresql/data
     healthcheck:
