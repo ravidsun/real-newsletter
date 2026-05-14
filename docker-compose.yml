@@ -1,58 +1,24 @@
-
 # ---------------------------------------------------------------------------
 # docker-compose.yml – Real Newsletter dev stack
 #
-# Used by the develop-branch CI workflow to deploy to the dev VPS.
-# The app image is built by GitHub Actions (GHCR) and pulled here.
-#
-# For purely local development you can override the app service with
-# `build: { context: . }` or run: docker compose up --build
+# Uses an external PostgreSQL instance already running on the VPS.
+# No db container needed.
 #
 # Required environment variables:
 #   APP_IMAGE    – Full GHCR image reference, e.g. ghcr.io/org/repo:develop
-#   DB_PASSWORD  – PostgreSQL password
+#   DB_URL       – JDBC connection string, e.g. jdbc:postgresql://host:5432/db
+#   DB_PASSWORD_DEV  – PostgreSQL password
 # ---------------------------------------------------------------------------
 
 services:
 
-  # ── Local PostgreSQL (creates realnews-dev database automatically) ────────
-  db:
-    image: postgres:18-alpine
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_DB: realnews-dev
-    # Port 5432 is intentionally NOT exposed to the host.
-    # The app container reaches db via Docker's internal network.
-    # Expose only if you need direct access from the host for debugging:
-    # ports:
-    #   - "5433:5432"   # use 5433 to avoid conflicts with a host-level postgres
-    volumes:
-      - pgdata-dev:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d realnews-dev"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-    restart: unless-stopped
-
   # ── Spring Boot application ───────────────────────────────────────────────
   app:
-    # On the dev VPS: pull the GHCR image built by the develop branch CI run.
-    # For local development you can override this with `build: { context: . }`
-    # or run: docker compose up --build
     image: ${APP_IMAGE}
     ports:
       - "8080:8080"
     environment:
-      DB_URL: jdbc:postgresql://db:5432/realnews-dev?sslmode=disable
-      DB_PASSWORD: ${DB_PASSWORD}
+      DB_URL: ${DB_URL}
+      DB_PASSWORD: ${DB_PASSWORD_DEV}
       SPRING_PROFILES_ACTIVE: dev
-    depends_on:
-      db:
-        condition: service_healthy
     restart: unless-stopped
-
-volumes:
-  pgdata-dev:
-

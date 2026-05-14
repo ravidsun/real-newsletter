@@ -94,7 +94,12 @@ jobs:
               -o docker-compose.prod.yml
             echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             export APP_IMAGE=ghcr.io/${{ github.repository }}:latest
+            export DB_URL=${{ vars.PROD_DB_URL }}
             export DB_PASSWORD=${{ secrets.DB_PASSWORD }}
             docker compose -f docker-compose.prod.yml pull
-            docker compose -f docker-compose.prod.yml up -d --remove-orphans
+            docker compose -f docker-compose.prod.yml up -d --remove-orphans || {
+              echo "=== docker compose up failed — app container logs ==="
+              docker logs real-newsletter-app-1 2>&1 || true
+              exit 1
+            }
             docker image prune -f

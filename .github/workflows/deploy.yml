@@ -25,9 +25,10 @@ jobs:
           [[ -z "${{ secrets.DEV_VPS_SSH_KEY }}" ]] && missing+=("DEV_VPS_SSH_KEY")
           [[ -z "${{ secrets.DB_PASSWORD_DEV }}" ]] && missing+=("DB_PASSWORD_DEV")
           [[ -z "${{ secrets.GHCR_TOKEN }}"      ]] && missing+=("GHCR_TOKEN")
+          [[ -z "${{ vars.DEV_DB_URL }}"         ]] && missing+=("DEV_DB_URL (variable)")
           if [[ ${#missing[@]} -gt 0 ]]; then
-            echo "❌ Missing GitHub secrets: ${missing[*]}"
-            echo "   Go to: Settings → Secrets and variables → Actions → New repository secret"
+            echo "❌ Missing GitHub secrets/variables: ${missing[*]}"
+            echo "   Go to: Settings → Secrets and variables → Actions"
             exit 1
           fi
           echo "✅ All required secrets are present."
@@ -93,7 +94,12 @@ jobs:
               -o docker-compose.yml
             echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             export APP_IMAGE=ghcr.io/${{ github.repository }}:develop
+            export DB_URL=${{ vars.DEV_DB_URL }}
             export DB_PASSWORD=${{ secrets.DB_PASSWORD_DEV }}
             docker compose -f docker-compose.yml pull
-            docker compose -f docker-compose.yml up -d --remove-orphans
+            docker compose -f docker-compose.yml up -d --remove-orphans || {
+              echo "=== docker compose up failed — app container logs ==="
+              docker logs real-newsletter-app-1 2>&1 || true
+              exit 1
+            }
             docker image prune -f
