@@ -67,12 +67,13 @@ jobs:
 
       # ── 5. Pre-flight: test TCP connectivity to the VPS ──────────────────────
       - name: Test SSH port reachability
+        continue-on-error: true
         run: |
           PORT=${{ vars.PROD_VPS_SSH_PORT || '22' }}
           echo "Testing TCP connectivity to ${{ secrets.PROD_VPS_HOST }}:$PORT ..."
           timeout 10 bash -c "cat < /dev/null > /dev/tcp/${{ secrets.PROD_VPS_HOST }}/$PORT" \
             && echo "✅ Port $PORT is reachable." \
-            || { echo "❌ Cannot reach ${{ secrets.PROD_VPS_HOST }}:$PORT — check firewall / VPS SSH port."; exit 1; }
+            || echo "⚠️  Cannot reach port $PORT — ensure Hostinger panel firewall allows TCP:$PORT from 0.0.0.0/0"
 
       # ── 6. SSH into Prod VPS and redeploy ─────────────────────────────────
       - name: Deploy to Prod VPS via SSH
