@@ -63,16 +63,33 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
-      # ── 5. SSH into Dev VPS and redeploy ──────────────────────────────────
+      # ── 5. Pre-flight: test TCP connectivity to the VPS ──────────────────────
+      - name: Test SSH port reachability
+        run: |
+          PORT=${{ vars.DEV_VPS_SSH_PORT || '22' }}
+          echo "Testing TCP connectivity to ${{ secrets.DEV_VPS_HOST }}:$PORT ..."
+          timeout 10 bash -c "cat < /dev/null > /dev/tcp/${{ secrets.DEV_VPS_HOST }}/$PORT" \
+            && echo "✅ Port $PORT is reachable." \
+            || { echo "❌ Cannot reach ${{ secrets.DEV_VPS_HOST }}:$PORT — check firewall / VPS SSH port."; exit 1; }
+
+      # ── 6. SSH into Dev VPS and redeploy ──────────────────────────────────
       - name: Deploy to Dev VPS via SSH
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.DEV_VPS_HOST }}
           username: ${{ secrets.DEV_VPS_USER }}
           key: ${{ secrets.DEV_VPS_SSH_KEY }}
+          port: ${{ vars.DEV_VPS_SSH_PORT || 22 }}
+          timeout: 30s
+          command_timeout: 10m
           script: |
             set -e
+            mkdir -p /opt/real-newsletter
             cd /opt/real-newsletter
+            # Copy compose file if not present
+            [ -f docker-compose.yml ] || curl -fsSL \
+              https://raw.githubusercontent.com/${{ github.repository }}/develop/docker-compose.yml \
+              -o docker-compose.yml
             echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             export APP_IMAGE=ghcr.io/${{ github.repository }}:develop
             export DB_PASSWORD=${{ secrets.DB_PASSWORD_DEV }}
