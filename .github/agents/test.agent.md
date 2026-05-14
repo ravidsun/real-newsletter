@@ -1,12 +1,17 @@
 ---
 name: "Test"
+version: "2.1"
 description: "Conditional coverage agent — runs ONLY when line coverage drops below 30% after Reviewer approval. Raises coverage to ≥ 70% and hands back to Reviewer for PR merge and DevOps deployment."
 autonomousExecution: true
 requirements:
   - git >= 2.0
-  - java >= 25
+  - gh >= 2.20
+  - java >= 21
   - maven >= 3.8
   - GITHUB_TOKEN environment variable
+config:
+  maxExtraRounds: 2       # maximum additional test-writing rounds after the first attempt
+  coverageTarget: 70      # % — must reach this before handing back to Reviewer
 mcp-servers:
   github:
     command: "npx"
@@ -53,6 +58,22 @@ You are the **conditional coverage agent** for the current repository.
 > Your sole purpose is to raise coverage to ≥ 70% so the Reviewer can merge the PR and the pipeline can proceed to DevOps.
 > The Reviewer has already validated code quality and architecture — do NOT repeat that work.
 
+## Step 0 — Prerequisite Verification
+
+```bash
+# 1. gh CLI authenticated
+gh auth status
+
+# 2. GITHUB_TOKEN present
+[ -z "$GITHUB_TOKEN" ] && echo "ERROR: GITHUB_TOKEN not set" && exit 1
+
+# 3. Maven available
+mvn --version
+
+# 4. Confirm the feature branch exists remotely
+gh pr view {pr_number} --json headRefName -q '.headRefName'
+```
+
 ## Responsibilities
 
 1. **Record start time** — note the current UTC timestamp as `testStartTime` (e.g., `2026-03-18T10:45:00Z`). Include it in the final output.
@@ -75,16 +96,22 @@ You are the **conditional coverage agent** for the current repository.
 
 5. **Add tests** to reach ≥ 70% coverage:
    - Unit tests (`@ExtendWith(MockitoExtension.class)`) for service/component logic.
-   - Repository slice tests (`@DataJpaTest`) for new query methods.
+   - Repository slice tests (`@DataJpaTest`) for new query methods — annotate with `@Transactional` to roll back test data automatically.
    - Controller slice tests (`@WebMvcTest`) for new REST endpoints.
-   - Use descriptive names: `shouldReturnX_whenY()`.
+   - Use descriptive names following the pattern: `should{ExpectedBehaviour}_when{Condition}()`.
    - Cover both happy-path and primary error/exception cases for each new class.
+   - **Test isolation rules:**
+     - Each test must be fully independent — no shared mutable state across test methods.
+     - Use `@BeforeEach` / `@AfterEach` for setup/teardown; never rely on test execution order.
+     - Mock all external dependencies (`@MockitoBean`, `@MockBean`) — never call real external systems or databases unless using `@DataJpaTest` with an embedded DB.
+     - Do not add tests that only test framework or library behaviour (e.g., getter/setter tests with no logic).
 
 6. **Re-run coverage** after adding tests:
    ```bash
    mvn clean test jacoco:report 2>&1
    ```
-   Confirm overall line coverage is now ≥ 70%. If still below, add more tests and repeat (max 2 extra rounds).
+   Confirm overall line coverage is now ≥ 70%. If still below, add more tests and repeat.
+   **Maximum rounds:** `1 initial + 2 extra = 3 total`. If coverage is still below 70% after 3 rounds and the remaining uncovered code cannot be tested without modifying production logic, post the Error Report and hand back to the Coder.
 
 7. **Commit and push** the new tests:
    ```bash
@@ -107,7 +134,10 @@ You are the **conditional coverage agent** for the current repository.
 - If a test failure is caused by a **logic error in production code**, do NOT work around it. Hand back to the Coder with a full error report.
 - Each new test must be independent and deterministic — no shared mutable state, no order dependency.
 - Mock external dependencies (`@MockitoBean`, `@MockBean`) — do not call real external systems.
+- Use `@Transactional` on `@DataJpaTest` tests to ensure database state is rolled back after each test.
+- Never write tests that only exercise framework or library code with no application logic.
 - Never approve or merge the PR — the Reviewer already approved it; only push test commits.
+- **Maximum test-writing rounds: 3** (1 initial + `maxExtraRounds` configured in frontmatter). After 3 rounds without reaching 70%, post the Error Report and halt.
 - **Always record and report duration** (`testStartTime`, `testEndTime`, `testDuration`).
 
 ## Failure Handling

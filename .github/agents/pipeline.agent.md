@@ -1,12 +1,19 @@
 ---
 name: "Pipeline"
+version: "2.1"
 description: "Orchestrates the full end-to-end agent pipeline (planner → coder → reviewer → test [conditional] → devops) for one or more GitHub issues. Invoke with: @pipeline Run pipeline for issue #N"
 autonomousExecution: true
 requirements:
   - git >= 2.0
+  - gh >= 2.20
   - java >= 21
   - maven >= 3.8
   - GITHUB_TOKEN environment variable
+config:
+  maxReviewCycles: 3          # maximum coder ↔ reviewer iterations per PR
+  coverageThreshold: 30       # % — invoke Test agent when coverage is below this
+  coverageTarget: 70          # % — Test agent must reach this before handing back
+  defaultMilestoneBatchSize: 5
 mcp-servers:
   github:
     command: "npx"
@@ -20,7 +27,18 @@ mcp-servers:
       - get_pull_request
       - list_pull_requests
       - search_issues
+      - update_issue
 handoffs:
+  - to: "planner"
+    when: "One or more issue numbers are identified and prerequisites are verified."
+  - to: "coder"
+    when: "Planning is complete (or Planner is skipped). Pass implementation issue number and review cycle."
+  - to: "reviewer"
+    when: "Coder reports build SUCCESS and PR is created. Pass PR number, coverage %, and review cycle."
+  - to: "test"
+    when: "Reviewer approves and coverage < coverageThreshold. Pass PR number, coverage %, and review cycle."
+  - to: "devops"
+    when: "Milestone batch is full OR all issues are processed. Pass pendingDeployment batch."
   - to: "done"
     when: "All implementation issues have been deployed, all PRs are merged, and all issues are closed."
 ---
@@ -36,6 +54,31 @@ echo "Repository: $REPO"
 ```
 
 Use `$REPO` in all GitHub CLI commands, URLs, and references throughout execution. Never hard-code a repository name.
+
+---
+
+## Stage −1 — Prerequisite Verification
+
+Before initialising batch state, verify the following. Halt with a clear error if any check fails.
+
+```bash
+# 1. gh CLI authenticated
+gh auth status
+
+# 2. GITHUB_TOKEN is set
+[ -z "$GITHUB_TOKEN" ] && echo "ERROR: GITHUB_TOKEN not set" && exit 1
+
+# 3. git is available and the working tree is a repository
+git rev-parse --show-toplevel
+
+# 4. Confirm the target issue(s) are readable
+gh issue view {issue_number} --json number,title,state -q '.number'
+
+# 5. Confirm the develop branch exists
+git ls-remote --exit-code origin develop || echo "WARNING: 'develop' branch not found — will fall back to 'main'"
+```
+
+If `develop` does not exist on the remote, use `main` as the integration branch and note this in every log entry.
 
 ---
 
@@ -121,7 +164,12 @@ Before processing any issues, initialise:
 pendingDeployment = []          # list of { issue, pr, mergeCommitSha, coverage }
 milestoneCount    = 0           # number of DevOps runs completed so far
 milestoneBatchSize = 5          # default; override with --milestone-size N
+integrationBranch = "develop"   # set to "main" if develop does not exist (see Stage -1)
 ```
+
+> **Idempotency note:** If the pipeline is re-triggered for an issue that already has a merged PR from
+> a previous run, skip Stages 1–4 for that issue and add the existing PR directly to `pendingDeployment`.
+> Use `gh pr list --search "closes #{issue}" --state merged` to detect this.
 
 ### Stage 1 – Plan
 1. Record `plannerStartTime` (UTC ISO 8601 timestamp).
@@ -137,12 +185,12 @@ milestoneBatchSize = 5          # default; override with --milestone-size N
 1. Record `coderStartTime`.
 2. For each implementation issue, delegate to the **Coder agent**:
    - Pass the implementation issue number and current review cycle number.
+   - Pass `integrationBranch` so the Coder targets the correct base branch.
    - Receive the feature branch name, PR number, and the local build/test result summary (pass/fail + coverage %).
-3. If multiple implementation issues are independent (no dependencies), process them sequentially.
-4. If dependencies exist (e.g., "issue #45 before #43"), respect the order.
-5. Record `coderEndTime`; compute `coderDuration`.
-6. If the Coder reports a build or test failure, halt — do not proceed to Stage 3.
-7. Record all (issue → PR → coverage%) mappings.
+3. Issues are always processed **sequentially** — one at a time, regardless of dependencies.
+4. Record `coderEndTime`; compute `coderDuration`.
+5. If the Coder reports a build or test failure, halt — do not proceed to Stage 3.
+6. Record all (issue → PR → coverage%) mappings.
 
 ### Stage 3 – Review (per PR)
 1. Record `reviewerStartTime`.
@@ -193,6 +241,7 @@ Update the state table: issues in `pendingDeployment` show status `⏳ Queued (m
 1. Record `devopsStartTime`.
 2. Delegate to the **DevOps agent** with the **entire `pendingDeployment` batch**:
    - Pass the list of `{ issue, pr, mergeCommitSha, coverage }` objects.
+   - Pass `integrationBranch`.
    - Pass the milestone number (e.g., "Milestone 1 of 2").
    - The DevOps agent will create **one** version bump, **one** release, and close **all** issues in the batch.
    - Receive deployment confirmation, release tag, and list of closed issues.
@@ -256,7 +305,7 @@ After all issues complete, append a **Time Summary** to the final pipeline outpu
 - If only **one** issue is in the pipeline (single-issue run), treat it as a final flush and run DevOps immediately — a batch of 1 at end-of-run is still valid.
 - The Test agent runs **only** when coverage is < 30% after Reviewer approval. Document the reason in the state table.
 - Always pass the review cycle number between Reviewer → Coder → Reviewer so cycles are tracked correctly.
-- Process dependent issues sequentially; independent issues can be run sequentially.
+- Process dependent issues sequentially; independent issues are also processed sequentially (parallelism is not supported — execute one at a time to preserve batch integrity).
 - **Always record start and end timestamps** when invoking each sub-agent. Include durations in every status update and in the final summary.
 - If any stage fails unrecoverably (build error, cycle limit exceeded, deployment failure), stop that issue's pipeline branch and report clearly — do not silently skip.
 - Issues that are merged but waiting for a milestone are in `pendingDeployment`. They are **not** closed until DevOps runs for their batch.
@@ -383,7 +432,7 @@ When halting, post this on the **original GitHub issue** (and the implementation
 
 To re-trigger the pipeline after the fix:
 > `@pipeline Run pipeline for issue #{N}`
-> (Note: the pipeline restarts from Stage 1 — no partial resume is supported)
+> (Note: the pipeline checks for existing merged PRs and resumes from the Batch Gate if the branch was already merged; otherwise it restarts from Stage 1.)
 ```
 
 ---

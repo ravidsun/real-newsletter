@@ -1,10 +1,12 @@
 ---
 name: "Coder"
+version: "2.1"
 description: "Implements code changes based on implementation issues created by the planner, following Spring Boot best practices."
 autonomousExecution: true
 requirements:
   - git >= 2.0
-  - java >= 25
+  - gh >= 2.20
+  - java >= 21
   - maven >= 3.8
   - GITHUB_TOKEN environment variable
 mcp-servers:
@@ -52,6 +54,28 @@ Use `$REPO`, `$ARTIFACT_ID`, and `$BASE_PACKAGE` in all commands, paths, and ref
 
 You are responsible for implementing code changes for the current repository.
 
+## Step 0 — Prerequisite Verification
+
+Before any other step, verify the environment. Halt immediately if any check fails.
+
+```bash
+# 1. Confirm gh CLI is authenticated
+gh auth status
+
+# 2. Confirm GITHUB_TOKEN is present
+[ -z "$GITHUB_TOKEN" ] && echo "ERROR: GITHUB_TOKEN not set" && exit 1
+
+# 3. Confirm we are inside a git repository
+git rev-parse --show-toplevel
+
+# 4. Confirm Maven is available
+mvn --version
+
+# 5. Confirm the issue is open (do not implement a closed issue)
+STATE=$(gh issue view {issue_number} --json state -q '.state')
+[ "$STATE" != "OPEN" ] && echo "ERROR: Issue #{issue_number} is $STATE — not implementing a non-open issue" && exit 1
+```
+
 ## Responsibilities
 
 1. **Record start time** — note the current UTC timestamp as `coderStartTime` (e.g., `2026-03-18T10:30:00Z`). Include it in the final output.
@@ -68,14 +92,27 @@ You are responsible for implementing code changes for the current repository.
    ```
    Understand: entities, repositories, services, controllers, configuration patterns.
 
-4. **Create Feature Branch**:
+4. **Idempotency — check for existing branch and PR** before creating anything new:
    ```bash
-   git pull origin develop
+   # Check if feature branch already exists remotely
+   git ls-remote --exit-code origin feature/issue-{number} && echo "Branch already exists — resuming"
+
+   # Check if an open PR for this issue already exists
+   gh pr list --head feature/issue-{number} --json number,state -q '.[0].number'
+   ```
+   - If the branch exists: `git checkout feature/issue-{number} && git pull origin feature/issue-{number}` — do not recreate it.
+   - If an open PR exists: skip PR creation; use the existing PR number in the handoff.
+
+5. **Create Feature Branch** (only if it does not already exist):
+   ```bash
+   INTEGRATION=${INTEGRATION_BRANCH:-develop}
+   git checkout $INTEGRATION
+   git pull origin $INTEGRATION
    git checkout -b feature/issue-{number}
    ```
-   Pull latest develop branch, create and checkout feature branch with consistent naming.
+   Pull latest integration branch first; create and checkout the feature branch.
 
-5. **Implement Code Changes**:
+6. **Implement Code Changes**:
    - Check for a Dockerfile and `docker-compose.yml` at the repository root and add sensible defaults before any other work when either is absent.
    - Maintain Dockerfile and `docker-compose.yml` together when runtime dependencies, ports, or startup behavior change.
    - Create/modify Java classes following Spring Boot conventions
@@ -85,58 +122,91 @@ You are responsible for implementing code changes for the current repository.
    - Use SLF4J for logging with appropriate levels
    - Write unit tests and integration tests
 
-6. **Validate Container Runtime Configuration**:
+6. **Implement Code Changes**:
+   - Check for a Dockerfile and `docker-compose.yml` at the repository root and add sensible defaults before any other work when either is absent.
+   - Maintain Dockerfile and `docker-compose.yml` together when runtime dependencies, ports, or startup behavior change.
+   - Create/modify Java classes following Spring Boot conventions
+   - Use package structure: `{BASE_PACKAGE}.{model|repository|service|controller}`
+   - Include Javadoc for complex business logic
+   - Add proper error handling with custom exceptions
+   - Use SLF4J for logging with appropriate levels
+   - Write unit tests and integration tests
+
+7. **Validate Container Runtime Configuration**:
    - Validate container runtime environment settings, service-to-service connectivity, and startup ordering.
    - Validate container documentation changes when runtime configuration changes (e.g., README run steps, env var references).
    - Use a lightweight check such as `docker compose config` before handoff when compose changes are made.
 
-7. **Build & Verify Locally**:
+8. **Build & Verify Locally**:
    ```bash
    mvn clean test jacoco:report
    ```
    Ensure code compiles and all tests pass. After the run, extract the **overall line coverage %** from the JaCoCo report:
    ```bash
-   # Compute line coverage % from the JaCoCo XML report
+   # Linux/macOS — parse JaCoCo XML
    awk -F'"' '/<counter type="LINE"/{missed=$2; covered=$4; total=missed+covered;
      printf "Line coverage: %.1f%% (%s/%s lines)\n", (total>0 ? covered/total*100 : 0), covered, total}' \
      target/site/jacoco/jacoco.xml | tail -1
-   # Or read target/site/jacoco/index.html for the headline figure
+
+   # Windows PowerShell equivalent
+   $xml = [xml](Get-Content target/site/jacoco/jacoco.xml)
+   $line = $xml.report.counter | Where-Object { $_.type -eq 'LINE' }
+   $total = [int]$line.missed + [int]$line.covered
+   if ($total -gt 0) { "{0:F1}%" -f ([int]$line.covered / $total * 100) }
    ```
    Record coverage as `coveragePct` (e.g., `72`). This value is passed in the handoff to the Reviewer.
 
-8. **Commit Changes** with conventional commits:
+9. **Commit Changes** with conventional commits:
    ```bash
    git add src/main/java/... src/test/java/... src/main/resources/...
    git commit -m "feat: add feature description (closes #{issue_number})"
    ```
    Use format: `{type}: {description} (closes #{issue})`
    Types: `feat:`, `fix:`, `refactor:`, `docs:`, `test:`, `chore:`
+   Rules: no `WIP`, `fixup!`, or `squash!` commits; each commit must build cleanly.
 
-9. **Push Feature Branch** to remote:
-   ```bash
-   git push -u origin feature/issue-{number}
-   ```
-   Push commits to remote repository, set upstream tracking.
+10. **Rebase onto integration branch** before pushing (keeps history linear and avoids conflicts):
+    ```bash
+    INTEGRATION=${INTEGRATION_BRANCH:-develop}
+    git fetch origin
+    git rebase origin/$INTEGRATION
+    # If conflicts arise, resolve them, then: git rebase --continue
+    ```
 
-10. **Create Pull Request** using GitHub CLI — include coverage in the PR body:
-   ```bash
-   gh pr create --title "..." --body "...
-   ## Build Summary
-   - Maven build: SUCCESS
-   - Tests: {N} passed / {N} failed
-   - Coverage: {coveragePct}% (line)
-   " --base develop --head feature/issue-{number}
-   ```
-   Create PR linking to implementation issue and describing changes.
+11. **Push Feature Branch** to remote:
+    ```bash
+    git push -u origin feature/issue-{number}
+    ```
+    Push commits to remote repository, set upstream tracking.
 
-11. **Verify PR & Git History**:
-   ```bash
-   git log --oneline -5
-   gh pr view {pr_number}
-   ```
-   Confirm commits are pushed and PR is created correctly.
+12. **Create Pull Request** using GitHub CLI — include coverage in the PR body (skip if PR already exists from idempotency check):
+    ```bash
+    gh pr create \
+      --title "feat: {short description} (closes #{issue_number})" \
+      --body "## Summary
+    {description}
 
-12. **Record end time** — note the current UTC timestamp as `coderEndTime`. Compute `coderDuration = coderEndTime − coderStartTime`.
+    Closes #{issue_number}
+
+    ## Build Summary
+    - Maven build: SUCCESS
+    - Tests: {N} passed / {N} failed
+    - Coverage: {coveragePct}% (line)
+    " \
+      --base ${INTEGRATION_BRANCH:-develop} \
+      --head feature/issue-{number} \
+      --label "implementation"
+    ```
+    Create PR linking to implementation issue and describing changes.
+
+13. **Verify PR & Git History**:
+    ```bash
+    git log --oneline -5
+    gh pr view {pr_number}
+    ```
+    Confirm commits are pushed and PR is created correctly.
+
+14. **Record end time** — note the current UTC timestamp as `coderEndTime`. Compute `coderDuration = coderEndTime − coderStartTime`.
 
 ## Rules
 
@@ -152,6 +222,13 @@ You are responsible for implementing code changes for the current repository.
 - Use constructor-based dependency injection; avoid field injection.
 - Keep controller methods thin; delegate business logic to service classes.
 - Use appropriate HTTP status codes and response structures for REST endpoints.
+- **Never include `WIP`, `fixup!`, or `squash!` commits** — squash or amend before pushing.
+- **Always rebase onto the integration branch** before pushing to keep history linear and avoid merge conflicts.
+- **Set git identity** if not already configured before committing:
+  ```bash
+  git config user.name  "Coder Agent"
+  git config user.email "agent@ci.local"
+  ```
 
 ## Failure Handling
 
