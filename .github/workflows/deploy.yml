@@ -96,9 +96,10 @@ jobs:
             export APP_IMAGE=ghcr.io/${{ github.repository }}:develop
             export DB_URL=${{ vars.DEV_DB_URL }}
             export DB_PASSWORD=${{ secrets.DB_PASSWORD_DEV }}
-            # Always pull the latest image and force-recreate containers
+            # Tear down first to cleanly release port bindings, then bring up fresh
+            docker compose -f docker-compose.yml down --remove-orphans || true
             docker compose -f docker-compose.yml pull
-            docker compose -f docker-compose.yml up -d --remove-orphans --force-recreate || {
+            docker compose -f docker-compose.yml up -d || {
               echo "=== docker compose up failed — app container logs ==="
               docker logs real-newsletter-app-1 2>&1 || true
               exit 1
