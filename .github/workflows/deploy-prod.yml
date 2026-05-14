@@ -99,6 +99,7 @@ jobs:
             export APP_IMAGE=ghcr.io/${{ github.repository }}:latest
             export DB_URL=${{ vars.PROD_DB_URL }}
             export DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+            export APP_HOST=${{ vars.PROD_APP_HOST }}
             # Tear down existing containers to release port bindings
             docker compose -f docker-compose.prod.yml down --remove-orphans || true
             # Kill any non-compose process still holding port 8080

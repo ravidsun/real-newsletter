@@ -1,24 +1,34 @@
 # ---------------------------------------------------------------------------
 # docker-compose.prod.yml – Real Newsletter production stack
 #
-# Uses an external PostgreSQL instance already running on the VPS.
-# No db container needed.
+# Runs alongside Coolify/Traefik on the VPS.
+# Traefik handles routing with HTTPS — no direct port exposure needed.
 #
 # Required environment variables:
-#   APP_IMAGE    – Full GHCR image reference, e.g. ghcr.io/org/repo:latest
-#   DB_URL       – JDBC connection string, e.g. jdbc:postgresql://host:5432/db
+#   APP_IMAGE    – Full GHCR image reference
+#   DB_URL       – JDBC connection string
 #   DB_PASSWORD  – PostgreSQL password
+#   APP_HOST     – Hostname Traefik should route to this app (e.g. api.yourdomain.com)
 # ---------------------------------------------------------------------------
 
 services:
-
-  # ── Spring Boot application ────────────────────────────────────────────────
   app:
     image: ${APP_IMAGE}
-    ports:
-      - "8080:8080"
     environment:
       DB_URL: ${DB_URL}
       DB_PASSWORD: ${DB_PASSWORD}
       SPRING_PROFILES_ACTIVE: prd
     restart: unless-stopped
+    networks:
+      - coolify
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.real-newsletter-prod.rule=Host(`${APP_HOST}`)"
+      - "traefik.http.routers.real-newsletter-prod.entrypoints=https"
+      - "traefik.http.routers.real-newsletter-prod.tls=true"
+      - "traefik.http.routers.real-newsletter-prod.tls.certresolver=letsencrypt"
+      - "traefik.http.services.real-newsletter-prod.loadbalancer.server.port=8081"
+
+networks:
+  coolify:
+    external: true
