@@ -1,0 +1,28 @@
+name: Deploy to Hostinger (Dev)
+
+on:
+  push:
+    branches: [ develop ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. Checkout source ────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. Deploy to Hostinger Dev VPS via official action ────────────────
+      - name: Deploy to Hostinger (Dev)
+        uses: hostinger/deploy-action@v1
+        with:
+          api-key: ${{ secrets.HOSTINGER_API_KEY }}
+          virtual-machine: ${{ vars.HOSTINGER_VM_ID_DEV }}
+          docker-compose-path: docker-compose.yml
+          # For private repos, uncomment:
+          # personal-token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          environment-variables: |
+            DB_PASSWORD=${{ secrets.DB_PASSWORD_DEV }}
+            SPRING_PROFILES_ACTIVE=dev
+

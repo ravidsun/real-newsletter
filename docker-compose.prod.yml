@@ -1,0 +1,52 @@
+
+# ---------------------------------------------------------------------------
+# docker-compose.prod.yml – Real Newsletter production stack
+#
+# All sensitive values are injected at runtime via environment variables
+# (GitHub Actions secrets / VPS environment).
+#
+# Required environment variables (set as GitHub Secrets or VPS env vars):
+#   DB_PASSWORD        – PostgreSQL password
+#   DB_URL             – Full JDBC connection string (if using external DB)
+#                        e.g. jdbc:postgresql://db:5432/realnews?sslmode=disable
+#   SPRING_PROFILES_ACTIVE – e.g. prd
+#   (plus any app-specific env vars such as API keys)
+# ---------------------------------------------------------------------------
+
+services:
+
+  # ── PostgreSQL ─────────────────────────────────────────────────────────────
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: realnews
+    volumes:
+      - pgdata-prod:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d realnews"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # ── Spring Boot application ────────────────────────────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      DB_URL: jdbc:postgresql://db:5432/realnews?sslmode=disable
+      DB_PASSWORD: ${DB_PASSWORD}
+      SPRING_PROFILES_ACTIVE: prd
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata-prod:
+
