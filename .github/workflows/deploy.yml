@@ -88,16 +88,22 @@ jobs:
             set -e
             mkdir -p /opt/real-newsletter
             cd /opt/real-newsletter
-            # Always fetch the latest compose file from the repo
+            # Fetch latest compose file with auth (works for private repos)
             curl -fsSL \
-              https://raw.githubusercontent.com/${{ github.repository }}/develop/docker-compose.yml \
+              -H "Authorization: Bearer ${{ secrets.GHCR_TOKEN }}" \
+              -H "Accept: application/vnd.github.raw+json" \
+              "https://api.github.com/repos/${{ github.repository }}/contents/docker-compose.yml?ref=develop" \
               -o docker-compose.yml
             echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             export APP_IMAGE=ghcr.io/${{ github.repository }}:develop
             export DB_URL=${{ vars.DEV_DB_URL }}
             export DB_PASSWORD=${{ secrets.DB_PASSWORD_DEV }}
-            # Tear down first to cleanly release port bindings, then bring up fresh
+            # Tear down existing containers to release port bindings
             docker compose -f docker-compose.yml down --remove-orphans || true
+            # Kill any non-compose process still holding port 8080
+            docker ps --filter publish=8080 -q | xargs -r docker stop || true
+            fuser -k 8080/tcp 2>/dev/null || true
+            # Pull latest image and start
             docker compose -f docker-compose.yml pull
             docker compose -f docker-compose.yml up -d || {
               echo "=== docker compose up failed — app container logs ==="
