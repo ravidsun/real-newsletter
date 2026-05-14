@@ -18,11 +18,11 @@ jobs:
         uses: hostinger/deploy-action@v1
         with:
           api-key: ${{ secrets.HOSTINGER_API_KEY }}
-          virtual-machine: ${{ vars.HOSTINGER_VM_ID_DEV }}
+          virtual-machine: ${{ vars.HOSTINGER_VM_ID }}
           docker-compose-path: docker-compose.yml
           # For private repos, uncomment:
           # personal-token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
           environment-variables: |
-            DB_PASSWORD=${{ secrets.DB_PASSWORD_DEV }}
+            DB_PASSWORD=${{ secrets.DB_PASSWORD }}
             SPRING_PROFILES_ACTIVE=dev
 
