@@ -1,28 +1,67 @@
-name: Deploy to Hostinger (Prod)
+name: Deploy to Prod VPS
 
 on:
   push:
     branches: [ main ]
 
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
 jobs:
-  deploy:
+  build-and-deploy:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
 
     steps:
       # ── 1. Checkout source ────────────────────────────────────────────────
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ── 2. Deploy to Hostinger Prod VPS via official action ───────────────
-      - name: Deploy to Hostinger (Prod)
-        uses: hostinger/deploy-action@v1
+      # ── 2. Log in to GitHub Container Registry ────────────────────────────
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
         with:
-          api-key: ${{ secrets.HOSTINGER_API_KEY }}
-          virtual-machine: ${{ vars.HOSTINGER_VM_ID }}
-          docker-compose-path: docker-compose.prod.yml
-          # For private repos, uncomment:
-          # personal-token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
-          environment-variables: |
-            DB_PASSWORD=${{ secrets.DB_PASSWORD }}
-            SPRING_PROFILES_ACTIVE=prd
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
+      # ── 3. Extract Docker metadata (tags, labels) ─────────────────────────
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=sha,prefix=prod-
+            latest
+
+      # ── 4. Build and push Docker image ────────────────────────────────────
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      # ── 5. SSH into Prod VPS and redeploy ─────────────────────────────────
+      - name: Deploy to Prod VPS via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.PROD_VPS_HOST }}
+          username: ${{ secrets.PROD_VPS_USER }}
+          key: ${{ secrets.PROD_VPS_SSH_KEY }}
+          script: |
+            set -e
+            cd /opt/real-newsletter
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            export APP_IMAGE=ghcr.io/${{ github.repository }}:latest
+            export DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+            docker compose -f docker-compose.prod.yml pull
+            docker compose -f docker-compose.prod.yml up -d --remove-orphans
+            docker image prune -f

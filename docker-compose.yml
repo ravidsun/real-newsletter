@@ -1,13 +1,16 @@
 
 # ---------------------------------------------------------------------------
-# docker-compose.yml – Real Newsletter local development stack
+# docker-compose.yml – Real Newsletter dev stack
 #
-# Prerequisites:
-#   1. Ensure .env.dev exists with the correct DB_URL (see .env.dev template).
-#   2. Run: docker compose up --build
+# Used by the develop-branch CI workflow to deploy to the dev VPS.
+# The app image is built by GitHub Actions (GHCR) and pulled here.
 #
-# The `db` service automatically creates the `realnews-dev` database on first
-# start.  Flyway then runs V1-V5 migrations to create all tables inside it.
+# For purely local development you can override the app service with
+# `build: { context: . }` or run: docker compose up --build
+#
+# Required environment variables:
+#   APP_IMAGE    – Full GHCR image reference, e.g. ghcr.io/org/repo:develop
+#   DB_PASSWORD  – PostgreSQL password
 # ---------------------------------------------------------------------------
 
 services:
@@ -31,22 +34,19 @@ services:
 
   # ── Spring Boot application ───────────────────────────────────────────────
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    # On the dev VPS: pull the GHCR image built by the develop branch CI run.
+    # For local development you can override this with `build: { context: . }`
+    # or run: docker compose up --build
+    image: ${APP_IMAGE}
     ports:
       - "8080:8080"
-    env_file:
-      - .env.dev          # loads dev-specific DB URL, API keys, etc.
     environment:
-      # Override DB_URL to point to the local `db` service instead of the
-      # remote IP so developers can work fully offline.
       DB_URL: jdbc:postgresql://db:5432/realnews-dev?sslmode=disable
+      DB_PASSWORD: ${DB_PASSWORD}
       SPRING_PROFILES_ACTIVE: dev
     depends_on:
       db:
         condition: service_healthy
-    pull_policy: build
     restart: unless-stopped
 
 volumes:

@@ -2,15 +2,12 @@
 # ---------------------------------------------------------------------------
 # docker-compose.prod.yml – Real Newsletter production stack
 #
-# All sensitive values are injected at runtime via environment variables
-# (GitHub Actions secrets / VPS environment).
+# The app image is built by GitHub Actions and pushed to GHCR.
+# The VPS pulls the pre-built image – no source code needed on the server.
 #
-# Required environment variables (set as GitHub Secrets or VPS env vars):
-#   DB_PASSWORD        – PostgreSQL password
-#   DB_URL             – Full JDBC connection string (if using external DB)
-#                        e.g. jdbc:postgresql://db:5432/realnews?sslmode=disable
-#   SPRING_PROFILES_ACTIVE – e.g. prd
-#   (plus any app-specific env vars such as API keys)
+# Required environment variables (injected by GitHub Actions or a .env file):
+#   APP_IMAGE      – Full GHCR image reference, e.g. ghcr.io/org/repo:latest
+#   DB_PASSWORD    – PostgreSQL password
 # ---------------------------------------------------------------------------
 
 services:
@@ -33,9 +30,7 @@ services:
 
   # ── Spring Boot application ────────────────────────────────────────────────
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ${APP_IMAGE}
     ports:
       - "8080:8080"
     environment:
