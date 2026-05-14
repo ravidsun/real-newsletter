@@ -88,16 +88,17 @@ jobs:
             set -e
             mkdir -p /opt/real-newsletter
             cd /opt/real-newsletter
-            # Copy compose file if not present
-            [ -f docker-compose.yml ] || curl -fsSL \
+            # Always fetch the latest compose file from the repo
+            curl -fsSL \
               https://raw.githubusercontent.com/${{ github.repository }}/develop/docker-compose.yml \
               -o docker-compose.yml
             echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             export APP_IMAGE=ghcr.io/${{ github.repository }}:develop
             export DB_URL=${{ vars.DEV_DB_URL }}
             export DB_PASSWORD=${{ secrets.DB_PASSWORD_DEV }}
+            # Always pull the latest image and force-recreate containers
             docker compose -f docker-compose.yml pull
-            docker compose -f docker-compose.yml up -d --remove-orphans || {
+            docker compose -f docker-compose.yml up -d --remove-orphans --force-recreate || {
               echo "=== docker compose up failed — app container logs ==="
               docker logs real-newsletter-app-1 2>&1 || true
               exit 1
