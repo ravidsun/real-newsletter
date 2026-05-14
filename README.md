@@ -1,6 +1,6 @@
 # Real Newsletter
 
-An AI-powered news aggregation and delivery platform built with **Spring Boot 4**, **Spring AI 2 (OpenAI GPT-4)**, and **PostgreSQL (Supabase)**. It periodically fetches the latest articles from [Newsdata.io](https://newsdata.io) and the [NewsAPI](https://newsapi.org), enriches them with AI-generated summaries and tags, persists them, and delivers them to clients via a paginated REST API and a real-time Server-Sent Events (SSE) stream.
+An AI-powered news aggregation and delivery platform built with **Spring Boot 4**, **Spring AI 2 (OpenAI GPT-4)**, **Spring Security (JWT)**, and **PostgreSQL (Supabase)**. It periodically fetches the latest articles from [Newsdata.io](https://newsdata.io) and the [NewsAPI](https://newsapi.org), enriches them with AI-generated summaries and tags, persists them, and delivers them to clients via a paginated REST API and a real-time Server-Sent Events (SSE) stream — all behind a hardened security layer.
 
 ---
 
@@ -14,15 +14,27 @@ An AI-powered news aggregation and delivery platform built with **Spring Boot 4*
 - [Running Locally](#running-locally)
   - [With Maven](#with-maven)
   - [With Docker Compose](#with-docker-compose)
+- [Authentication](#authentication)
+  - [POST /api/auth/login](#post-apiauthlogin)
+  - [POST /api/auth/refresh](#post-apiauthrefresh)
+  - [POST /api/auth/logout](#post-apiauthlogout)
 - [API Reference](#api-reference)
   - [GET /api/v1/articles](#get-apiv1articles)
+  - [GET /api/v1/articles/archived](#get-apiv1articlesarchived)
+  - [POST /api/v1/articles](#post-apiv1articles)
+  - [PUT /api/v1/articles/{id}](#put-apiv1articlesid)
+  - [DELETE /api/v1/articles/{id}](#delete-apiv1articlesid)
   - [GET /api/v1/articles/stream](#get-apiv1articlesstream)
   - [POST /api/v1/ingestion](#post-apiv1ingestion)
+  - [GET /api/v1/search](#get-apiv1search)
 - [Real-Time SSE Streaming](#real-time-sse-streaming)
+- [Article Lifecycle](#article-lifecycle)
+- [Security Model](#security-model)
 - [Database Schema](#database-schema)
 - [CORS Configuration](#cors-configuration)
 - [Running Tests](#running-tests)
 - [Project Structure](#project-structure)
+- [Branching Strategy](#branching-strategy)
 - [Release History](#release-history)
 
 ---
@@ -34,15 +46,22 @@ An AI-powered news aggregation and delivery platform built with **Spring Boot 4*
 | **Dual News Ingestion** | Scheduled jobs fetch the latest English/US news from both [Newsdata.io](https://newsdata.io) and [NewsAPI](https://newsapi.org) on configurable intervals. Duplicate articles (by URL) are automatically skipped. |
 | **Manual Ingestion** | `POST /api/v1/ingestion?source=newsdata\|newsapi\|all` triggers an immediate fetch and returns `IngestionResult` stats (`fetched`, `saved`, `skipped`, `errors`). |
 | **AI Enrichment** | Each new article is sent to OpenAI GPT-4 via Spring AI to generate a plain-text summary and a set of comma-separated tags. |
-| **Rate Limiting** | Per-source rate limiting prevents API quota exhaustion across both news providers. |
-| **Paginated REST API** | `GET /api/v1/articles` returns stored articles as a paginated JSON response, sorted by newest first. |
+| **Keyword Search** | `GET /api/v1/search?query=...` performs full-text keyword search across title and content, with optional `category` and `dateRange` filters. Rate-limited to prevent abuse. |
+| **Article Lifecycle** | Articles progress through `DRAFT → PUBLISHED → DISABLED / ARCHIVED` states. Admins can disable or delete articles via REST. Articles older than 7 days are archived automatically. |
+| **Admin Portal API** | State-changing endpoints (`POST`, `PUT`, `DELETE` on `/api/v1/articles`) require the `ADMIN` role and are protected by `@PreAuthorize`. |
+| **JWT Authentication** | Short-lived access tokens (15 min) issued on login. Long-lived refresh tokens stored in `HttpOnly; Secure; SameSite=Strict` cookies with automatic token rotation. |
+| **Rate Limiting (Bucket4j)** | `/api/auth/**` and `/api/v1/search` are protected by a token-bucket rate limiter; excess requests receive `HTTP 429`. |
+| **XSS Sanitization** | All rich-text HTML fields (`title`, `description`, `content`) are sanitized through OWASP Java HTML Sanitizer before persistence. |
+| **RBAC** | `@PreAuthorize("hasRole('ADMIN')")` guards all state-changing article endpoints. Non-admin users receive `HTTP 403`. |
+| **Paginated REST API** | `GET /api/v1/articles` returns stored PUBLISHED articles as a paginated JSON response, sorted newest-first, with optional `country`, `language`, and `category` filters. |
+| **Archived Feed** | `GET /api/v1/articles/archived` returns articles that have been moved to `ARCHIVED` status (older than 7 days), supporting the same filters as the main feed. |
 | **Real-Time SSE Stream** | `GET /api/v1/articles/stream` opens a persistent Server-Sent Events connection. Every new article saved triggers a `new-article` event pushed to all connected clients instantly. |
 | **Profile-Based CORS** | Separate CORS policies for `development` (all origins allowed) and `production` (restricted to a configured frontend origin). |
 | **Profile-Driven Config** | `application-{profile}.yml` files own all environment-specific settings (Flyway, connection pool, rate limits, logging). No hardcoded defaults in `@Value` annotations. |
-| **Database Migrations** | Flyway manages schema evolution automatically on startup with per-profile `create-schemas`, `clean-disabled`, and `connect-retries` settings. |
+| **Database Migrations** | Flyway manages schema evolution automatically on startup with per-profile settings. |
+| **Daily Archiving Scheduler** | Runs at midnight every day; automatically transitions PUBLISHED articles older than 7 days to ARCHIVED status. |
 | **Keep-Alive Scheduler** | A background job periodically pings the database to prevent idle connection drops on Supabase's connection pooler. |
-| **Actuator** | Spring Boot Actuator endpoints available for health and metrics monitoring. |
-| **OpenAPI / Swagger UI** | Auto-generated API docs available at `/swagger-ui.html`. |
+| **Actuator & OpenAPI** | Spring Boot Actuator endpoints for health and metrics; auto-generated Swagger UI at `/swagger-ui.html`. |
 
 ---
 
@@ -56,15 +75,15 @@ An AI-powered news aggregation and delivery platform built with **Spring Boot 4*
 │   │ NewsApiIngestion      │   │ NewsDataIngestion     │               │
 │   │ Scheduler            │   │ Scheduler             │               │
 │   └──────────┬───────────┘   └──────────┬────────────┘               │
-│              │                          │                             │
 │              └────────────┬─────────────┘                             │
 │                           ▼                                           │
-│                  IngestionScheduler                                    │
-│              1. Fetch from news source                                 │
-│              2. Deduplicate by URL                                     │
-│              3. AI-enrich (summary + tags via GPT-4)                  │
-│              4. Save to DB                                             │
-│              5. Publish NewArticleEvent                                │
+│                  IngestionScheduler                                   │
+│              1. Fetch from news source                                │
+│              2. Deduplicate by URL                                    │
+│              3. AI-enrich (summary + tags via GPT-4)                 │
+│              4. Sanitize HTML fields (OWASP Sanitizer)               │
+│              5. Save to DB (status = PUBLISHED)                       │
+│              6. Publish NewArticleEvent                               │
 │                     │                  │                              │
 │         ┌───────────▼──┐  ┌────────────▼──────────┐                  │
 │         │  PostgreSQL   │  │  ArticleStreamService  │                  │
@@ -73,11 +92,19 @@ An AI-powered news aggregation and delivery platform built with **Spring Boot 4*
 │                                         │ push event                  │
 │                                ┌────────▼────────┐                    │
 │                                │  SSE Clients    │                    │
-│                                │  (browsers,curl │                    │
-│                                │   etc.)         │                    │
 │                                └─────────────────┘                    │
 │                                                                       │
-│  REST Clients ──► GET /api/v1/articles ──► ArticleController          │
+│  ArticleArchivingScheduler ──► bulk PUBLISHED→ARCHIVED (daily)       │
+│                                                                       │
+│  REST Clients                                                         │
+│    Public:  GET /api/v1/articles ──────────► ArticleController       │
+│    Public:  GET /api/v1/articles/archived ─► ArticleController       │
+│    Public:  GET /api/v1/search ────────────► SearchController        │
+│    Admin:   POST/PUT/DELETE /api/v1/articles ► ArticleController     │
+│    Auth:    POST /api/auth/** ─────────────► AuthController          │
+│                                                                       │
+│  Spring Security / JwtAuthenticationFilter (all requests)            │
+│  Bucket4j Rate Limiter (/api/auth/**, /api/v1/search)                │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -89,16 +116,18 @@ An AI-powered news aggregation and delivery platform built with **Spring Boot 4*
 |---|---|
 | Language | Java 21 |
 | Framework | Spring Boot 4.0.0 |
+| Security | Spring Security 6 + JJWT (JWT), Bucket4j (rate limiting) |
 | AI Integration | Spring AI 2.0.0-M2 (OpenAI GPT-4) |
 | HTTP Client | Spring `RestClient` (synchronous) |
 | Persistence | Spring Data JPA + Hibernate |
 | Database | PostgreSQL via Supabase (production), H2 (tests) |
 | Migrations | Flyway |
 | Real-Time | Server-Sent Events (`SseEmitter`) |
+| Input Sanitization | OWASP Java HTML Sanitizer |
 | Build | Maven 3.9+ |
 | Containerisation | Docker / Docker Compose |
 | Testing | JUnit 5, Mockito, MockMvc |
-| Coverage | JaCoCo (≥ 87% line coverage) |
+| Coverage | JaCoCo (≥ 71% line coverage) |
 | API Docs | SpringDoc OpenAPI 3 |
 
 ---
@@ -132,6 +161,14 @@ NEWS_API_URL=https://newsapi.org/v2/everything
 NEWS_API_KEY=your-newsapi-key
 
 OPENAI_API_KEY=sk-...
+
+# JWT — change these in production!
+JWT_SECRET=your-256-bit-base64-encoded-secret
+JWT_ACCESS_TOKEN_TTL_MINUTES=15
+JWT_REFRESH_TOKEN_TTL_DAYS=7
+
+# CORS — production frontend origin
+CORS_ALLOWED_ORIGIN=https://frontend.example.com
 ```
 
 ### Full `application.yml` reference
@@ -148,6 +185,14 @@ OPENAI_API_KEY=sk-...
 | `news.api.url` | `$NEWS_API_URL` | NewsAPI endpoint |
 | `news.api.key` | `$NEWS_API_KEY` | NewsAPI key |
 | `ingestion.interval.ms` | `600000` (10 min) | How often the ingestion jobs run (milliseconds) |
+| `jwt.secret` | `$JWT_SECRET` | HS256 secret key (base64-encoded, ≥ 32 bytes) |
+| `jwt.access-token-ttl-minutes` | `15` | Access token lifetime in minutes |
+| `jwt.refresh-token-ttl-days` | `7` | Refresh token lifetime in days |
+| `jwt.refresh-cookie-name` | `refresh_token` | Name of the HttpOnly refresh-token cookie |
+| `bucket4j-rate-limit.enabled` | `true` | Enable/disable Bucket4j rate limiting |
+| `bucket4j-rate-limit.capacity` | `20` | Token bucket burst capacity |
+| `bucket4j-rate-limit.refill-tokens` | `20` | Tokens refilled per window |
+| `bucket4j-rate-limit.refill-period-seconds` | `60` | Refill window in seconds |
 
 ---
 
@@ -159,7 +204,7 @@ OPENAI_API_KEY=sk-...
 # 1. Clone the repository
 git clone https://github.com/ravidsun/real-newsletter.git
 cd real-newsletter
-
+```bash
 # 2. Export environment variables (or create a .env file and source it)
 export DB_URL="jdbc:postgresql://..."
 export DB_USER="postgres"
@@ -169,6 +214,7 @@ export NEWSDATA_API_KEY="pub_your-newsdata-key"
 export NEWS_API_URL="https://newsapi.org/v2/everything"
 export NEWS_API_KEY="your-newsapi-key"
 export OPENAI_API_KEY="sk-..."
+export JWT_SECRET="your-base64-secret"
 
 # 3. Run the application
 mvn spring-boot:run
@@ -204,11 +250,114 @@ docker compose down
 
 ---
 
+## Authentication
+
+The API uses **JWT-based authentication** with short-lived access tokens and HttpOnly refresh token cookies.
+
+### Token Flow
+
+```
+Client                                        Server
+  │                                              │
+  │  POST /api/auth/login {username, password}   │
+  ├─────────────────────────────────────────────►│
+  │                                              │  Verify credentials
+  │  200 { accessToken, tokenType, expiresIn }   │  Issue 15-min access token
+  │◄─────────────────────────────────────────────┤  Set HttpOnly refresh cookie
+  │                                              │
+  │  GET /api/v1/articles                        │
+  │  Authorization: Bearer <accessToken>         │
+  ├─────────────────────────────────────────────►│
+  │  200 { articles... }                         │
+  │◄─────────────────────────────────────────────┤
+  │                                              │
+  │  POST /api/auth/refresh (cookie sent auto)   │  Rotate refresh token
+  ├─────────────────────────────────────────────►│  Issue new access token
+  │  200 { accessToken, tokenType, expiresIn }   │  Set new HttpOnly cookie
+  │◄─────────────────────────────────────────────┤
+```
+
+All access tokens are **Bearer tokens** included in the `Authorization` header. Refresh tokens travel exclusively in `HttpOnly; Secure; SameSite=Strict` cookies, making them invisible to JavaScript and immune to XSS theft.
+
+---
+
+### `POST /api/auth/login`
+
+Authenticates a user and returns a short-lived access token + sets a refresh token cookie.
+
+**Request Body**
+
+```json
+{ "username": "admin", "password": "secret" }
+```
+
+**Success Response (200)**
+
+```json
+{
+  "accessToken": "eyJhbGciOiJIUzI1NiJ9...",
+  "tokenType": "Bearer",
+  "expiresIn": 900
+}
+```
+
+The response also sets a `Set-Cookie` header:
+
+```
+Set-Cookie: refresh_token=<opaque-token>; Path=/api/auth; Max-Age=604800; HttpOnly; Secure; SameSite=Strict
+```
+
+**Error Responses**
+
+| Status | Meaning |
+|--------|---------|
+| `401` | Invalid credentials |
+| `429` | Rate limit exceeded |
+
+---
+
+### `POST /api/auth/refresh`
+
+Exchanges a valid refresh token (from cookie) for a new access token. The old refresh token is **rotated** — it is invalidated and a new one is issued.
+
+**Headers / Cookies**
+
+The refresh token cookie is sent automatically by the browser. No request body required.
+
+**Success Response (200)**
+
+```json
+{
+  "accessToken": "eyJhbGciOiJIUzI1NiJ9...",
+  "tokenType": "Bearer",
+  "expiresIn": 900
+}
+```
+
+**Error Responses**
+
+| Status | Meaning |
+|--------|---------|
+| `401` | Missing, expired, or already-rotated refresh token |
+| `429` | Rate limit exceeded |
+
+---
+
+### `POST /api/auth/logout`
+
+Revokes the refresh token and clears the cookie.
+
+**Success Response**
+
+`204 No Content`
+
+---
+
 ## API Reference
 
 ### `GET /api/v1/articles`
 
-Returns a paginated list of stored articles, sorted by `createdAt` descending (newest first) by default.
+Returns a paginated list of **PUBLISHED** articles, sorted by `createdAt` descending (newest first) by default. DISABLED and ARCHIVED articles are excluded from this feed.
 
 **Query Parameters**
 
@@ -217,11 +366,14 @@ Returns a paginated list of stored articles, sorted by `createdAt` descending (n
 | `page` | integer | `0` | Zero-based page number |
 | `size` | integer | `20` | Number of articles per page |
 | `sort` | string | `createdAt,desc` | Sort field and direction (e.g. `title,asc`) |
+| `country` | string | — | Filter by ISO country code (e.g. `us`, `gb`) |
+| `language` | string | — | Filter by ISO language code (e.g. `en`, `fr`) |
+| `category` | string | — | Filter by category (e.g. `technology`, `sports`) |
 
 **Example Request**
 
 ```bash
-curl "http://localhost:8080/api/v1/articles?page=0&size=5&sort=createdAt,desc"
+curl "http://localhost:8080/api/v1/articles?page=0&size=5&category=technology"
 ```
 
 **Example Response**
@@ -231,19 +383,18 @@ curl "http://localhost:8080/api/v1/articles?page=0&size=5&sort=createdAt,desc"
   "content": [
     {
       "id": "550e8400-e29b-41d4-a716-446655440000",
-      "url": "https://example.com/article-1",
+      "link": "https://example.com/article-1",
       "title": "Breaking: Major Tech Announcement",
       "content": "Full article content here...",
       "aiSummary": "A major technology company announced a groundbreaking product today...",
-      "tags": "technology, innovation, ai",
-      "createdAt": "2026-04-17T09:45:00Z"
+      "category": "technology",
+      "country": "us",
+      "language": "english",
+      "status": "PUBLISHED",
+      "pubDate": "2026-05-14T09:45:00Z",
+      "createdAt": "2026-05-14T09:45:00Z"
     }
   ],
-  "pageable": {
-    "pageNumber": 0,
-    "pageSize": 5,
-    "sort": { "sorted": true, "unsorted": false }
-  },
   "page": {
     "totalElements": 42,
     "totalPages": 9,
@@ -256,13 +407,111 @@ curl "http://localhost:8080/api/v1/articles?page=0&size=5&sort=createdAt,desc"
 }
 ```
 
-> **Note:** Spring Data 4 moved pagination metadata (`totalElements`, `totalPages`, `number`) under the nested `page` key in JSON responses.
+> **Note:** Spring Data 4 moved pagination metadata under the nested `page` key.
+
+---
+
+### `GET /api/v1/articles/archived`
+
+Returns a paginated list of **ARCHIVED** articles (articles automatically archived after 7 days). Supports the same optional filters as the main feed.
+
+**Query Parameters**
+
+Same as `GET /api/v1/articles` — supports `page`, `size`, `sort`, `country`, `language`, `category`.
+
+**Example Request**
+
+```bash
+curl "http://localhost:8080/api/v1/articles/archived?page=0&size=10"
+```
+
+---
+
+### `POST /api/v1/articles`
+
+Creates a new article. **Requires `ADMIN` role** (`Authorization: Bearer <adminToken>`).
+
+Rich-text fields (`title`, `description`, `content`) are sanitized by OWASP Java HTML Sanitizer before persistence to prevent stored XSS.
+
+**Request Body**
+
+```json
+{
+  "link": "https://example.com/article",
+  "title": "Article Title",
+  "description": "Short description",
+  "content": "Full article content...",
+  "creator": "Author Name"
+}
+```
+
+**Success Response**
+
+`201 Created` with the saved `ArticleDto`.
+
+**Error Responses**
+
+| Status | Meaning |
+|--------|---------|
+| `400` | Validation failure (missing required fields) |
+| `401` | Missing or invalid access token |
+| `403` | Authenticated but not ADMIN |
+
+---
+
+### `PUT /api/v1/articles/{id}`
+
+Updates the lifecycle status of an article. **Requires `ADMIN` role**.
+
+**Path Parameters**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `id` | UUID | Article identifier |
+
+**Request Body**
+
+```json
+{ "status": "DISABLED" }
+```
+
+Valid values: `DRAFT`, `PUBLISHED`, `DISABLED`, `ARCHIVED`
+
+**Success Response**
+
+`200 OK` with the updated `ArticleDto`.
+
+**Error Responses**
+
+| Status | Meaning |
+|--------|---------|
+| `401` | Missing or invalid access token |
+| `403` | Authenticated but not ADMIN |
+| `404` | Article not found |
+
+---
+
+### `DELETE /api/v1/articles/{id}`
+
+Permanently deletes an article from the database. **Requires `ADMIN` role**.
+
+**Success Response**
+
+`204 No Content`
+
+**Error Responses**
+
+| Status | Meaning |
+|--------|---------|
+| `401` | Missing or invalid access token |
+| `403` | Authenticated but not ADMIN |
+| `404` | Article not found |
 
 ---
 
 ### `GET /api/v1/articles/stream`
 
-Opens a persistent **Server-Sent Events** (SSE) connection. The server pushes a `new-article` event to this connection every time the ingestion job saves a new article to the database.
+Opens a persistent **Server-Sent Events** (SSE) connection. The server pushes a `new-article` event to this connection every time the ingestion job saves a new article.
 
 **Response Headers**
 
@@ -277,7 +526,7 @@ Connection: keep-alive
 ```
 id: 550e8400-e29b-41d4-a716-446655440000
 event: new-article
-data: {"id":"550e8400-...","url":"https://...","title":"...","aiSummary":"...","tags":"...","createdAt":"..."}
+data: {"id":"550e8400-...","link":"https://...","title":"...","aiSummary":"...","createdAt":"..."}
 ```
 
 **Example — Browser (JavaScript)**
@@ -288,12 +537,9 @@ const source = new EventSource('http://localhost:8080/api/v1/articles/stream');
 source.addEventListener('new-article', (event) => {
   const article = JSON.parse(event.data);
   console.log('New article:', article.title);
-  console.log('Tags:', article.tags);
 });
 
-source.onerror = () => {
-  console.error('SSE connection error');
-};
+source.onerror = () => console.error('SSE connection error');
 ```
 
 ---
@@ -320,11 +566,70 @@ curl -X POST "http://localhost:8080/api/v1/ingestion?source=all"
 {
   "status": "completed",
   "source": "all",
-  "triggeredAt": "2026-05-03T14:00:00Z",
+  "triggeredAt": "2026-05-14T14:00:00Z",
   "newsdata": { "fetched": 10, "saved": 8, "skipped": 2, "errors": 0 },
   "newsapi":   { "fetched": 15, "saved": 12, "skipped": 3, "errors": 0 }
 }
 ```
+
+---
+
+### `GET /api/v1/search`
+
+Searches **PUBLISHED** articles by keyword across `title` and `content`, with optional `category` and `dateRange` filters. This endpoint is rate-limited — excess requests receive `HTTP 429`.
+
+**Query Parameters**
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `query` | string | ✅ | Keyword to search (case-insensitive, matched against title and content) |
+| `category` | string | — | Filter by category (e.g. `technology`) |
+| `dateRange` | string | — | Date window: `last7days`, `last30days`, `last90days` |
+| `page` | integer | — | Zero-based page number (default `0`) |
+| `size` | integer | — | Results per page (default `20`) |
+| `sort` | string | — | Sort field and direction (default `createdAt,desc`) |
+
+**Example Requests**
+
+```bash
+# Simple keyword search
+curl "http://localhost:8080/api/v1/search?query=artificial+intelligence"
+
+# Search with category and date filter
+curl "http://localhost:8080/api/v1/search?query=climate&category=science&dateRange=last30days"
+```
+
+**Example Response**
+
+```json
+{
+  "content": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440001",
+      "link": "https://example.com/ai-article",
+      "title": "Advances in Artificial Intelligence",
+      "aiSummary": "Researchers have unveiled new breakthroughs in AI...",
+      "category": "technology",
+      "status": "PUBLISHED",
+      "pubDate": "2026-05-10T08:00:00Z",
+      "createdAt": "2026-05-10T08:00:00Z"
+    }
+  ],
+  "page": {
+    "totalElements": 7,
+    "totalPages": 1,
+    "number": 0,
+    "size": 20
+  }
+}
+```
+
+**Error Responses**
+
+| Status | Meaning |
+|--------|---------|
+| `400` | `query` parameter is missing or blank |
+| `429` | Rate limit exceeded |
 
 ---
 
@@ -355,27 +660,107 @@ data: {"id":"550e8400-...","title":"Example Article",...}
 
 ---
 
+## Article Lifecycle
+
+Articles follow a well-defined lifecycle managed by admins and automated schedulers:
+
+```
+           Ingestion
+               │
+               ▼
+           PUBLISHED  ◄──── Admin re-enables
+               │
+        ┌──────┴──────┐
+        │             │
+        ▼             ▼
+    DISABLED      ARCHIVED
+   (admin)      (auto, 7 days)
+        │
+        ▼
+    DELETE (permanent)
+```
+
+| Status | Visible in `/api/v1/articles` | Visible in `/archived` | How it gets there |
+|--------|:----:|:----:|---|
+| `PUBLISHED` | ✅ | ❌ | Default on ingestion or admin action |
+| `DISABLED` | ❌ | ❌ | Admin sets via `PUT /{id}` |
+| `ARCHIVED` | ❌ | ✅ | `ArticleArchivingScheduler` runs daily at midnight |
+| `DRAFT` | ❌ | ❌ | Admin creates via `POST /api/v1/articles` |
+
+The **`ArticleArchivingScheduler`** runs every day at midnight (server timezone) and bulk-transitions all `PUBLISHED` articles whose `pubDate` is older than **7 days** to `ARCHIVED`.
+
+---
+
+## Security Model
+
+The platform implements multiple layers of security aligned with the OWASP Top 10:
+
+| Threat | Mitigation |
+|--------|-----------|
+| Brute-force / credential stuffing | Bucket4j rate limiting on `/api/auth/**` (HTTP 429) |
+| Scraping / DDoS on search | Bucket4j rate limiting on `/api/v1/search` (HTTP 429) |
+| XSS via stored content | OWASP Java HTML Sanitizer on all rich-text article fields |
+| Privilege escalation | `@PreAuthorize("hasRole('ADMIN')")` on state-changing endpoints |
+| Token theft via XSS | Refresh tokens in `HttpOnly; Secure; SameSite=Strict` cookies |
+| Replay attacks | Refresh token rotation — each `/refresh` call invalidates the previous token |
+| Cross-origin requests | Strict CORS — only configured frontend origins allowed in production |
+
+### Secured Endpoints Summary
+
+| Endpoint | Auth Required | Role Required |
+|----------|:---:|:---:|
+| `GET /api/v1/articles` | ❌ | — |
+| `GET /api/v1/articles/archived` | ❌ | — |
+| `GET /api/v1/articles/stream` | ❌ | — |
+| `GET /api/v1/search` | ❌ | — (rate-limited) |
+| `POST /api/v1/ingestion` | ❌ | — |
+| `POST /api/v1/articles` | ✅ Bearer | `ADMIN` |
+| `PUT /api/v1/articles/{id}` | ✅ Bearer | `ADMIN` |
+| `DELETE /api/v1/articles/{id}` | ✅ Bearer | `ADMIN` |
+| `POST /api/auth/login` | ❌ | — (rate-limited) |
+| `POST /api/auth/refresh` | ❌ (cookie) | — (rate-limited) |
+| `POST /api/auth/logout` | ❌ (cookie) | — |
+
+---
+
 ## Database Schema
 
 Managed by **Flyway**. Migrations run automatically on application startup.
 
-### `articles` table (`V1__init_schema.sql`)
-
-| Column | Type | Constraints | Description |
-|---|---|---|---|
-| `id` | `UUID` | PK, default `uuid_generate_v4()` | Unique article identifier |
-| `url` | `TEXT` | NOT NULL, UNIQUE | Source URL (used for deduplication) |
-| `title` | `TEXT` | | Article headline |
-| `content` | `TEXT` | | Full article body |
-| `created_at` | `TIMESTAMPTZ` | default `now()` | When the article was ingested |
-| `updated_at` | `TIMESTAMPTZ` | default `now()` | Last modification timestamp |
-
-### AI fields (`V2__add_ai_fields.sql`)
+### Core `articles` table
 
 | Column | Type | Description |
 |---|---|---|
-| `ai_summary` | `TEXT` | GPT-4 generated plain-text summary |
-| `tags` | `TEXT` | Comma-separated tags generated by GPT-4 (e.g. `"ai, technology, innovation"`) |
+| `id` | `UUID` PK | Unique article identifier |
+| `link` | `TEXT` UNIQUE | Source URL (used for deduplication) |
+| `title` | `TEXT` | Article headline |
+| `content` | `TEXT` | Full article body |
+| `description` | `TEXT` | Short article description |
+| `creator` | `TEXT` | Author / byline |
+| `language` | `TEXT` | ISO language code |
+| `country` | `TEXT` | ISO country code |
+| `category` | `TEXT` | News category |
+| `pub_date` | `TIMESTAMPTZ` | Original publication date (used for archiving) |
+| `status` | `VARCHAR(20)` | Article lifecycle status (`PUBLISHED`, `DISABLED`, `ARCHIVED`, `DRAFT`) |
+| `ai_summary` | `TEXT` | GPT-4 generated summary |
+| `ai_tag` | `TEXT` | GPT-4 generated tags |
+| `source_name` | `TEXT` | Source publication name |
+| `image_url` | `TEXT` | Article thumbnail URL |
+| `created_at` | `TIMESTAMPTZ` | When the article was ingested |
+| `updated_at` | `TIMESTAMPTZ` | Last modification timestamp (auto-updated by trigger) |
+
+### Migration history
+
+| Migration | Description |
+|---|---|
+| `V1__init_schema.sql` | Initial `articles` table with `url`, `title`, `content`, `created_at` |
+| `V2__add_ai_fields.sql` | Added `ai_summary`, `tags` columns |
+| `V3__extend_articles_schema.sql` | Renamed `url` → `link`; added full Newsdata.io field set |
+| `V4__add_source_type.sql` | Added `source_type` discriminator column |
+| `V5__add_article_sequence.sql` | Added sequence for article ordering |
+| `V6__add_title_hash.sql` | Added `title_hash` column for deduplication |
+| `V7__add_updated_at_trigger.sql` | Trigger to auto-update `updated_at` on row change |
+| `V8__add_article_status.sql` | Added `status VARCHAR(20) NOT NULL DEFAULT 'PUBLISHED'` |
 
 ---
 
@@ -399,12 +784,12 @@ Allows all origins (`*`), all standard methods, all headers, with credentials an
 java -jar app.jar --spring.profiles.active=production
 ```
 
-Restricts access to `https://frontend.example.com` only. Update `CorsConfig.java` to match your actual frontend URL before deploying.
+Restricts access to your configured `CORS_ALLOWED_ORIGIN` only. Set this environment variable to your actual frontend domain before deploying.
 
 | Profile | Allowed Origins | Methods | Headers |
 |---|---|---|---|
 | `development` | `*` | GET, POST, PUT, DELETE, OPTIONS | `*` |
-| `production` | `https://frontend.example.com` | GET, POST, PUT, DELETE, OPTIONS | Content-Type, Authorization, Accept |
+| `production` | `$CORS_ALLOWED_ORIGIN` | GET, POST, PUT, DELETE, OPTIONS | Content-Type, Authorization, Accept |
 
 ---
 
@@ -428,7 +813,15 @@ Tests use an **H2 in-memory database** (profile `test`) — no Supabase connecti
 | Test Class | What Is Tested |
 |---|---|
 | `RealNewsletterApplicationTests` | Spring context loads without errors |
-| `ArticleControllerTest` | Paginated listing, sorting, SSE async start (integration) |
+| `ArticleControllerTest` | Paginated listing, filters, SSE async start (integration) |
+| `AdminArticleControllerTest` | Admin create, disable, delete — RBAC enforcement (integration) |
+| `SearchControllerTest` | Keyword search, category + date-range filters, rate limit (integration) |
+| `SecurityIntegrationTest` | Auth filter, token validation, 401/403 responses (integration) |
+| `AuthControllerIntegrationTest` | Login, refresh, logout, token rotation (integration) |
+| `JwtServiceTest` | Token generation, parsing, expiry (unit) |
+| `RefreshTokenStoreTest` | Token creation, validation, rotation, expiry (unit) |
+| `ArticleArchivingSchedulerTest` | Archiving logic, cutoff date, idempotency (unit) |
+| `ArticleArchivingAcceptanceTest` | End-to-end archive flow — scheduler + feed exclusion (integration) |
 | `AiEnhancementServiceTest` | Summary extraction, tag parsing, null handling (unit) |
 | `IngestionServiceTest` | Deduplication, new article persistence (integration) |
 | `ExternalNewsClientTest` | Newsdata.io HTTP client response mapping (unit) |
@@ -436,8 +829,11 @@ Tests use an **H2 in-memory database** (profile `test`) — no Supabase connecti
 | `NewsApiClientPaginatedTest` | NewsAPI pagination logic (unit) |
 | `NewsApiIngestionSchedulerTest` | NewsAPI scheduler orchestration (unit) |
 | `NewsDataIngestionSchedulerTest` | Newsdata.io scheduler orchestration (unit) |
+| `NewsApiSchedulerPropertiesTest` | NewsAPI scheduler config binding (unit) |
+| `NewsDataSchedulerPropertiesTest` | Newsdata.io scheduler config binding (unit) |
+| `ArticleRepositoryTest` | JPA queries, search, bulk status update (integration) |
 
-Current line coverage: **≥ 87%**
+Current line coverage: **≥ 71%**
 
 ---
 
@@ -449,7 +845,17 @@ real-newsletter/
 │   ├── main/
 │   │   ├── java/com/realnewsletter/
 │   │   │   ├── RealNewsletterApplication.java        # Entry point
+│   │   │   ├── auth/
+│   │   │   │   ├── AuthController.java               # /api/auth/login, /refresh, /logout
+│   │   │   │   ├── JwtAuthenticationFilter.java      # Bearer token extraction + validation
+│   │   │   │   ├── JwtProperties.java                # JWT config props (TTL, secret, cookie name)
+│   │   │   │   ├── JwtService.java                   # Token generation & parsing (JJWT)
+│   │   │   │   ├── LoginRequest.java                 # Login DTO (username, password)
+│   │   │   │   ├── LoginResponse.java                # Login DTO (accessToken, tokenType, expiresIn)
+│   │   │   │   └── RefreshTokenStore.java            # In-memory refresh token store (rotation)
 │   │   │   ├── config/
+│   │   │   │   ├── Bucket4jRateLimitInterceptor.java # Rate limiter (auth + search endpoints)
+│   │   │   │   ├── Bucket4jRateLimitProperties.java  # Rate limiter config (capacity, refill, TTL)
 │   │   │   │   ├── CorsConfig.java                   # Profile-based CORS rules
 │   │   │   │   ├── EnvironmentConfig.java            # Environment bean config
 │   │   │   │   ├── FlywayConfig.java                 # Dev-profile clean+migrate runner
@@ -457,22 +863,30 @@ real-newsletter/
 │   │   │   │   ├── NewsDataSchedulerProperties.java  # Newsdata scheduler config props
 │   │   │   │   ├── OpenApiConfig.java                # Swagger/OpenAPI configuration
 │   │   │   │   ├── RateLimitConfig.java              # Rate limit bean setup
-│   │   │   │   ├── RateLimitInterceptorImpl.java     # Rate limit interceptor
-│   │   │   │   ├── RateLimitProperties.java          # Rate limit config props
+│   │   │   │   ├── RateLimitInterceptorImpl.java     # Legacy rate limit interceptor
+│   │   │   │   ├── RateLimitProperties.java          # Legacy rate limit config props
+│   │   │   │   ├── SecurityConfig.java               # Spring Security filter chain + RBAC setup
 │   │   │   │   └── WebClientConfig.java              # RestClient bean
 │   │   │   ├── controller/
-│   │   │   │   ├── ArticleController.java            # REST + SSE endpoints
-│   │   │   │   └── IngestionController.java          # Manual ingestion trigger endpoint
+│   │   │   │   ├── ArticleController.java            # REST + SSE + admin article endpoints
+│   │   │   │   ├── IngestionController.java          # Manual ingestion trigger
+│   │   │   │   └── SearchController.java             # GET /api/v1/search
 │   │   │   ├── dto/
-│   │   │   │   └── ArticleDto.java                   # API response record
+│   │   │   │   ├── ArticleCreateRequest.java         # Admin create article request body
+│   │   │   │   ├── ArticleDto.java                   # API response record
+│   │   │   │   └── ArticleStatusUpdateRequest.java   # Admin status update request body
 │   │   │   ├── model/
-│   │   │   │   ├── Article.java                      # JPA entity
-│   │   │   │   └── NewArticleEvent.java              # Spring application event
+│   │   │   │   ├── Article.java                      # JPA entity (base)
+│   │   │   │   ├── ArticleStatus.java                # Lifecycle enum (DRAFT, PUBLISHED, DISABLED, ARCHIVED)
+│   │   │   │   ├── NewArticleEvent.java              # Spring application event
+│   │   │   │   ├── NewsApiArticle.java               # NewsAPI-specific article model
+│   │   │   │   └── NewsdataArticle.java              # Newsdata.io-specific article model
 │   │   │   ├── repository/
-│   │   │   │   └── ArticleRepository.java            # Spring Data JPA repository
+│   │   │   │   ├── ArticleRepository.java            # Spring Data JPA repository
+│   │   │   │   └── ArticleSpecification.java         # JPA Specifications (filters, search queries)
 │   │   │   ├── scheduler/
+│   │   │   │   ├── ArticleArchivingScheduler.java    # Daily cron: PUBLISHED→ARCHIVED after 7 days
 │   │   │   │   ├── IngestionResult.java              # Shared record: fetched/saved/skipped/errors
-│   │   │   │   ├── IngestionScheduler.java           # Core ingestion orchestrator
 │   │   │   │   ├── KeepAliveScheduler.java           # DB keep-alive ping
 │   │   │   │   ├── NewsApiIngestionScheduler.java    # NewsAPI scheduled trigger
 │   │   │   │   └── NewsDataIngestionScheduler.java   # Newsdata.io scheduled trigger
@@ -480,7 +894,9 @@ real-newsletter/
 │   │   │       ├── AiEnhancementService.java         # GPT-4 summary + tag generation
 │   │   │       ├── ArticleStreamService.java         # SSE client registry + broadcaster
 │   │   │       ├── ExternalNewsClient.java           # Newsdata.io HTTP client
-│   │   │       └── NewsApiClient.java                # NewsAPI HTTP client
+│   │   │       ├── HtmlSanitizerService.java         # OWASP HTML sanitization
+│   │   │       ├── NewsApiClient.java                # NewsAPI HTTP client
+│   │   │       └── SearchService.java                # Keyword search with category / date filters
 │   │   └── resources/
 │   │       ├── application.yml                       # Invariant defaults
 │   │       ├── application-local.yml                 # Local dev overrides
@@ -488,16 +904,34 @@ real-newsletter/
 │   │       ├── application-prd.yml                   # Production overrides
 │   │       └── db/migration/
 │   │           ├── V1__init_schema.sql               # Articles table
-│   │           └── V2__add_ai_fields.sql             # AI summary + tags columns
+│   │           ├── V2__add_ai_fields.sql             # AI summary + tags columns
+│   │           ├── V3__extend_articles_schema.sql    # Full Newsdata.io field set
+│   │           ├── V4__add_source_type.sql           # Source type discriminator
+│   │           ├── V5__add_article_sequence.sql      # Article ordering sequence
+│   │           ├── V6__add_title_hash.sql            # Title deduplication hash
+│   │           ├── V7__add_updated_at_trigger.sql    # Auto-update trigger
+│   │           └── V8__add_article_status.sql        # Lifecycle status column
 │   └── test/
 │       ├── java/com/realnewsletter/
 │       │   ├── RealNewsletterApplicationTests.java
+│       │   ├── auth/
+│       │   │   ├── AuthControllerIntegrationTest.java
+│       │   │   ├── JwtServiceTest.java
+│       │   │   └── RefreshTokenStoreTest.java
+│       │   ├── config/
+│       │   │   ├── NewsApiSchedulerPropertiesTest.java
+│       │   │   └── NewsDataSchedulerPropertiesTest.java
 │       │   ├── controller/
-│       │   │   └── ArticleControllerTest.java
+│       │   │   ├── AdminArticleControllerTest.java
+│       │   │   ├── ArticleControllerTest.java
+│       │   │   ├── SearchControllerTest.java
+│       │   │   └── SecurityIntegrationTest.java
 │       │   ├── repository/
 │       │   │   └── ArticleRepositoryTest.java
 │       │   └── service/
 │       │       ├── AiEnhancementServiceTest.java
+│       │       ├── ArticleArchivingAcceptanceTest.java
+│       │       ├── ArticleArchivingSchedulerTest.java
 │       │       ├── ExternalNewsClientPaginatedTest.java
 │       │       ├── ExternalNewsClientTest.java
 │       │       ├── IngestionServiceTest.java
@@ -505,7 +939,7 @@ real-newsletter/
 │       │       ├── NewsApiIngestionSchedulerTest.java
 │       │       └── NewsDataIngestionSchedulerTest.java
 │       └── resources/
-│           └── application-test.yml                  # H2 + Flyway-disabled config
+│           └── application-test.yml                  # H2 + Flyway-disabled + security config
 ├── Dockerfile
 ├── docker-compose.yml
 ├── pom.xml
@@ -553,11 +987,16 @@ git push origin main
 
 | Version | Date | Summary |
 |---|---|---|
-| [v2.0.0](https://github.com/ravidsun/real-newsletter/releases/tag/v2.0.0) | 2026-05-03 | Profile-driven Flyway configuration; manual ingestion endpoint with `IngestionResult` stats; 422 fix (null category default); JaCoCo 0.8.13 for Java 25 support; env-specific yml keys synced |
-| [v1.8.0](https://github.com/ravidsun/real-newsletter/releases/tag/v1.8.0) | 2026-04-17 | Upgrade to Spring Boot 4.0.0 + Spring AI 2.0.0-M2; fix Docker layer caching and libgcc dependency |
-| [v1.7.0](https://github.com/ravidsun/real-newsletter/releases/tag/v1.7.0) | — | Dual news source ingestion (Newsdata.io + NewsAPI) with rate limiting |
+| [v2.5.0](https://github.com/ravidsun/real-newsletter/releases/tag/v2.5.0) | 2026-05-14 | AI-Powered Article Search — `GET /api/v1/search` with keyword, category, and date-range filters; rate-limited |
+| [v2.4.0](https://github.com/ravidsun/real-newsletter/releases/tag/v2.4.0) | 2026-05-11 | Automated Article Archiving — daily scheduler archives PUBLISHED articles older than 7 days; `GET /api/v1/articles/archived` endpoint |
+| [v2.3.0](https://github.com/ravidsun/real-newsletter/releases/tag/v2.3.0) | 2026-05-11 | Admin Portal Article Lifecycle — `ArticleStatus` enum (DRAFT/PUBLISHED/DISABLED/ARCHIVED); `PUT /{id}`, `DELETE /{id}` admin endpoints; public feed excludes DISABLED articles |
+| [v2.2.0](https://github.com/ravidsun/real-newsletter/releases/tag/v2.2.0) | 2026-05-10 | JWT Authentication — short-lived access tokens (15 min), HttpOnly refresh token cookies, token rotation, `/api/auth/login`, `/refresh`, `/logout` |
+| [v2.1.0](https://github.com/ravidsun/real-newsletter/releases/tag/v2.1.0) | 2026-05-08 | Security Hardening — Bucket4j rate limiting, strict CORS, OWASP HTML sanitization, `@PreAuthorize` RBAC on all state-changing endpoints |
+| [v2.0.0](https://github.com/ravidsun/real-newsletter/releases/tag/v2.0.0) | 2026-05-03 | Profile-driven Flyway; manual ingestion endpoint with `IngestionResult` stats; JaCoCo 0.8.13 for Java 25 support |
+| [v1.8.0](https://github.com/ravidsun/real-newsletter/releases/tag/v1.8.0) | 2026-04-17 | Upgrade to Spring Boot 4.0.0 + Spring AI 2.0.0-M2; Docker layer caching fix |
+| [v1.7.0](https://github.com/ravidsun/real-newsletter/releases/tag/v1.7.0) | 2026-04-17 | Dual news source ingestion (Newsdata.io + NewsAPI) with rate limiting |
 | [v1.5.0](https://github.com/ravidsun/real-newsletter/releases/tag/v1.5.0) | 2026-04-11 | REST API, SSE streaming, CORS profiles |
-| v1.4.0 | — | AI enrichment pipeline (GPT-4 summaries + tags) |
+| v1.4.0 | 2026-04-11 | AI enrichment pipeline (GPT-4 summaries + tags) |
 | v1.3.0 | — | Scheduled news ingestion with deduplication |
 | v1.2.0 | — | Flyway database migrations |
 | v1.1.0 | — | Spring Data JPA persistence layer |
