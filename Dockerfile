@@ -26,5 +26,7 @@ COPY --from=builder /workspace/target/real-newsletter-*.jar app.jar
 
 EXPOSE 8081
 
-ENTRYPOINT ["java", "-jar", "app.jar", "--spring.profiles.active=dev"]
+ENV SPRING_PROFILES_ACTIVE=dev
+
+ENTRYPOINT ["java", "-jar", "app.jar"]
 
