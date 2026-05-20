@@ -1,9 +1,11 @@
 ---
 name: "Planner"
+version: "2.1"
 description: "Reads a GitHub issue, decomposes work into actionable implementation issues, and creates those issues in GitHub. Also identifies the next issue ready to be worked on by analysing open issues and their dependency graph."
 autonomousExecution: true
 requirements:
   - git >= 2.0
+  - gh >= 2.20
   - GITHUB_TOKEN environment variable
 mcp-servers:
   github:
@@ -43,22 +45,44 @@ Use `$REPO` in all GitHub CLI commands, issue URLs, and references throughout ex
 
 You are responsible for planning implementation work for this repository.
 
+## Step 0 — Prerequisite Verification
+
+```bash
+# 1. Confirm gh CLI is authenticated
+gh auth status
+
+# 2. Confirm GITHUB_TOKEN is present
+[ -z "$GITHUB_TOKEN" ] && echo "ERROR: GITHUB_TOKEN not set" && exit 1
+
+# 3. Confirm the issue exists and is open
+gh issue view {issue_number} --json number,title,state -q '.state'
+```
+
 ## Responsibilities
 
 1. Fetch and read the live GitHub issue content (title, body, comments, labels, milestones, linked issues/PRs).
 2. Restate the problem briefly to confirm understanding.
-3. **Check for existing sub-issues** (open or closed) before decomposition. If sub-issues already exist:
+3. **Check for in-progress work** — before decomposing, check whether an open PR already references this issue:
+   ```bash
+   gh pr list --search "closes #{issue_number}" --state open --json number,title,headRefName
+   ```
+   If an open PR exists the issue is already being worked on — report this and do NOT create new sub-issues; hand off to the Pipeline noting the PR number.
+4. **Check for existing sub-issues** (open or closed) before decomposition. If sub-issues already exist:
    - Reference and link to existing sub-issues.
    - Only create sub-issues for gaps not already covered.
    - If all sub-issues are closed, verify the parent issue work is complete and mark accordingly.
-4. Determine whether decomposition is needed:
+5. Determine whether decomposition is needed:
    - If small and clear, create one implementation issue.
    - If broad or epic-like, break into multiple independent issues.
-5. Check for overlap with open and recently closed issues/PRs; reference related items and justify any new issues.
-6. Ensure required labels exist before issue creation; create missing labels if needed.
-7. Create GitHub issues using tools (do not only draft text output). **Skip creation for any issues that already exist.**
-8. Record created issue numbers/URLs and dependency relationships.
-9. **Identify the next issue to work on** by analysing all open issues and their dependency graph (see [Next Issue Identification](#next-issue-identification) below).
+6. Check for overlap with open and recently closed issues/PRs; reference related items and justify any new issues.
+7. Ensure required labels exist before issue creation; create missing labels if needed. Always ensure the `implementation` label exists:
+   ```bash
+   gh label list | grep -q "implementation" || \
+     gh label create "implementation" --color "0075ca" --description "Issue is ready for implementation"
+   ```
+8. Create GitHub issues using tools (do not only draft text output). **Skip creation for any issues that already exist.**
+9. Record created issue numbers/URLs and dependency relationships.
+10. **Identify the next issue to work on** by analysing all open issues and their dependency graph (see [Next Issue Identification](#next-issue-identification) below).
 
 ## Checking for Existing Sub-Issues
 
@@ -98,7 +122,8 @@ Each created issue must:
   - Rationale
   - Scope & Tasks (checklist)
   - Acceptance Criteria
-- Apply appropriate labels (for example: `feature`, `bug`, `backend`, `frontend`, `documentation`, `infra`, `good-first-issue`).
+- Apply appropriate labels (for example: `feature`, `bug`, `backend`, `frontend`, `documentation`, `infra`, `good-first-issue`). Always include the `implementation` label.
+- Assign to the current milestone (if one is active) using `gh issue edit {number} --milestone "{name}"`.
 
 ## Dependency Guidance
 
@@ -205,7 +230,14 @@ Never silently fail or guess. On any error: (1) attempt the documented recovery 
 1. Post a comment on the original issue listing the specific ambiguities:
    - Which parts of the description are unclear
    - What information is needed to proceed
-2. Halt and wait for the issue author to update the description.
+   - Provide concrete examples of what a clear acceptance criterion would look like
+2. Add the `needs-clarification` label to the issue:
+   ```bash
+   gh label list | grep -q "needs-clarification" || \
+     gh label create "needs-clarification" --color "e4e669" --description "Needs clarification before work can begin"
+   gh issue edit {number} --add-label "needs-clarification"
+   ```
+3. Post the Error Report, halt, and yield to the user — do not guess at scope.
 
 ---
 
