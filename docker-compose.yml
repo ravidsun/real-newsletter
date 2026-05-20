@@ -14,16 +14,20 @@
 services:
   app:
     image: ${APP_IMAGE}
+    ports:
+      - "8081:8081"
     environment:
       DB_URL: ${DB_URL}
       DB_PASSWORD: ${DB_PASSWORD}
       SPRING_PROFILES_ACTIVE: dev
     restart: unless-stopped
+    # Attach to coolify network only when APP_HOST / Traefik routing is needed.
+    # Comment the networks block out if Coolify is not installed.
     networks:
       - coolify
     labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.real-newsletter-dev.rule=Host(`${APP_HOST}`)"
+      - "traefik.enable=${TRAEFIK_ENABLED:-false}"
+      - "traefik.http.routers.real-newsletter-dev.rule=Host(`${APP_HOST:-localhost}`)"
       - "traefik.http.routers.real-newsletter-dev.entrypoints=http"
       - "traefik.http.services.real-newsletter-dev.loadbalancer.server.port=8081"
 
