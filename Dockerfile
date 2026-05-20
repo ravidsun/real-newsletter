@@ -27,6 +27,7 @@ COPY --from=builder /workspace/target/real-newsletter-*.jar app.jar
 EXPOSE 8081
 
 ENV SPRING_PROFILES_ACTIVE=dev
+ENV SERVER_PORT=8081
 
 ENTRYPOINT ["java", "-jar", "app.jar"]
 

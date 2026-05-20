@@ -102,9 +102,9 @@ jobs:
             export APP_HOST=${{ vars.PROD_APP_HOST }}
             # Tear down existing containers to release port bindings
             docker compose -f docker-compose.prod.yml down --remove-orphans || true
-            # Kill any non-compose process still holding port 8080
-            docker ps --filter publish=8080 -q | xargs -r docker stop || true
-            fuser -k 8080/tcp 2>/dev/null || true
+            # Kill any non-compose process still holding port 9000
+            docker ps --filter publish=9000 -q | xargs -r docker stop || true
+            fuser -k 9000/tcp 2>/dev/null || true
             # Pull latest image and start
             docker compose -f docker-compose.prod.yml pull
             docker compose -f docker-compose.prod.yml up -d || {

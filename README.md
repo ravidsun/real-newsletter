@@ -14,6 +14,16 @@ An AI-powered news aggregation and delivery platform built with **Spring Boot 4*
 - [Running Locally](#running-locally)
   - [With Maven](#with-maven)
   - [With Docker Compose](#with-docker-compose)
+- [Deployment to VPS](#deployment-to-vps)
+  - [Architecture](#architecture-1)
+  - [Port Configuration](#port-configuration)
+  - [GitHub Actions Workflows](#github-actions-workflows)
+  - [Required Secrets & Variables](#required-github-secrets)
+  - [VPS Firewall](#vps-firewall-configuration)
+  - [Accessing Deployed Apps](#accessing-the-deployed-applications)
+  - [Database Setup](#database-setup-on-vps)
+  - [VPS Setup](#one-time-vps-setup)
+  - [Verifying Deployments](#verifying-deployments)
 - [Authentication](#authentication)
   - [POST /api/auth/login](#post-apiauthlogin)
   - [POST /api/auth/refresh](#post-apiauthrefresh)
@@ -150,16 +160,23 @@ All secrets are supplied through environment variables. Copy the template below 
 
 ```bash
 # .env — fill in your values before running
+
+# Application
+SERVER_PORT=8081
+
+# Database
 DB_URL=jdbc:postgresql://db.<project-ref>.supabase.co:6543/postgres?sslmode=require
 DB_USER=postgres
 DB_PASSWORD=your-supabase-password
 
+# News APIs
 NEWSDATA_API_URL=https://newsdata.io/api/1/news
 NEWSDATA_API_KEY=pub_your-newsdata-key
 
 NEWS_API_URL=https://newsapi.org/v2/everything
 NEWS_API_KEY=your-newsapi-key
 
+# AI Enrichment
 OPENAI_API_KEY=sk-...
 
 # JWT — change these in production!
@@ -175,6 +192,7 @@ CORS_ALLOWED_ORIGIN=https://frontend.example.com
 
 | Property | Default | Description |
 |---|---|---|
+| `server.port` | `8081` | HTTP server port (override with `$SERVER_PORT`; dev uses 8081, prod uses 9000 on VPS) |
 | `spring.datasource.url` | *(required)* `$DB_URL` | PostgreSQL JDBC connection string |
 | `spring.datasource.username` | *(required)* `$DB_USER` | Database username |
 | `spring.datasource.password` | *(required)* `$DB_PASSWORD` | Database password |
@@ -219,7 +237,15 @@ export JWT_SECRET="your-base64-secret"
 # 3. Run the application
 mvn spring-boot:run
 
-# The app starts on http://localhost:8080
+# The app starts on http://localhost:8081 (configurable via SERVER_PORT env var)
+```
+
+To run on a different port locally:
+
+```bash
+export SERVER_PORT=3000
+mvn spring-boot:run
+# App runs on http://localhost:3000
 ```
 
 To run with a specific Spring profile (e.g. `development` for permissive CORS):
@@ -237,10 +263,19 @@ cp .env.example .env   # edit with your real values
 # 2. Build and start
 docker compose up --build
 
-# The app is available at http://localhost:8080
+# The app is available at http://localhost:8081
 ```
 
 The Docker build uses **layer caching** — Maven dependencies are downloaded in a dedicated layer keyed on `pom.xml` only, so source-only changes rebuild the JAR without re-downloading all dependencies.
+
+To run with a different port locally:
+
+```bash
+export SERVER_PORT=3000
+export DB_URL="..." DB_PASSWORD="..." 
+docker compose up
+# http://localhost:3000
+```
 
 To stop:
 
@@ -373,7 +408,7 @@ Returns a paginated list of **PUBLISHED** articles, sorted by `createdAt` descen
 **Example Request**
 
 ```bash
-curl "http://localhost:8080/api/v1/articles?page=0&size=5&category=technology"
+curl "http://localhost:8081/api/v1/articles?page=0&size=5&category=technology"
 ```
 
 **Example Response**
@@ -532,7 +567,7 @@ data: {"id":"550e8400-...","link":"https://...","title":"...","aiSummary":"...",
 **Example — Browser (JavaScript)**
 
 ```js
-const source = new EventSource('http://localhost:8080/api/v1/articles/stream');
+const source = new EventSource('http://localhost:8081/api/v1/articles/stream');
 
 source.addEventListener('new-article', (event) => {
   const article = JSON.parse(event.data);
@@ -557,7 +592,7 @@ Triggers an immediate news ingestion cycle and waits for it to complete before r
 **Example Request**
 
 ```bash
-curl -X POST "http://localhost:8080/api/v1/ingestion?source=all"
+curl -X POST "http://localhost:8081/api/v1/ingestion?source=all"
 ```
 
 **Example Response**
@@ -593,10 +628,10 @@ Searches **PUBLISHED** articles by keyword across `title` and `content`, with op
 
 ```bash
 # Simple keyword search
-curl "http://localhost:8080/api/v1/search?query=artificial+intelligence"
+curl "http://localhost:8081/api/v1/search?query=artificial+intelligence"
 
 # Search with category and date filter
-curl "http://localhost:8080/api/v1/search?query=climate&category=science&dateRange=last30days"
+curl "http://localhost:8081/api/v1/search?query=climate&category=science&dateRange=last30days"
 ```
 
 **Example Response**
@@ -647,7 +682,7 @@ curl "http://localhost:8080/api/v1/search?query=climate&category=science&dateRan
 
 ```bash
 # Keep the connection open; new articles will stream in as they are ingested
-curl -N http://localhost:8080/api/v1/articles/stream
+curl -N http://localhost:8081/api/v1/articles/stream
 ```
 
 You will see output like:
@@ -807,7 +842,6 @@ mvn test -Dtest=ArticleControllerTest
 ```
 
 Tests use an **H2 in-memory database** (profile `test`) — no Supabase connection required. Flyway is disabled in test mode; Hibernate creates the schema automatically from JPA entity metadata. Spring AI OpenAI autoconfiguration is excluded in the test profile to avoid external API dependencies.
-
 ### Test Coverage
 
 | Test Class | What Is Tested |
@@ -836,6 +870,195 @@ Tests use an **H2 in-memory database** (profile `test`) — no Supabase connecti
 Current line coverage: **≥ 71%**
 
 ---
+
+The application deploys to a **Hostinger VPS** via **GitHub Actions** with automated Docker image builds and server updates.
+
+### Architecture
+
+```
+GitHub (main / develop branches)
+        │
+        ├─► develop push ──► build image ──► push to GHCR ──► SSH to dev VPS ──► docker compose deploy
+        │                                        (:develop tag)
+        │
+        └─► main push ──────► build image ──► push to GHCR ──► SSH to prod VPS ──► docker compose deploy
+                                 (:latest tag)
+```
+
+### Port Configuration
+
+| Environment | Host Port | Container Port | `SERVER_PORT` | Spring Profile |
+|---|---|---|---|---|
+| **Dev** | `8081` | `8081` | `8081` | `dev` |
+| **Prod** | `9000` | `9000` | `9000` | `prd` |
+
+Both dev and prod run on the **same VPS** simultaneously without port conflicts.
+
+### GitHub Actions Workflows
+
+#### 1. `.github/workflows/deploy.yml` — Deploy to Dev VPS
+
+**Trigger:** `push` to `develop` branch
+
+```yaml
+on:
+  push:
+    branches: [ develop ]
+```
+
+**Steps:**
+1. Validate all required GitHub secrets/variables are present
+2. Checkout source code
+3. Log in to GHCR
+4. Build Docker image and push as `:develop` tag
+5. Test SSH connectivity (warning-only, doesn't fail the pipeline)
+6. SSH into dev VPS and execute:
+   - Fetch `docker-compose.yml` from the `develop` branch
+   - Log in to GHCR
+   - Pull the latest `:develop` image
+   - Tear down old containers
+   - Start fresh with `docker compose up -d`
+   - Print app logs if startup fails
+
+#### 2. `.github/workflows/deploy-prod.yml` — Deploy to Prod VPS
+
+**Trigger:** `push` to `main` branch
+
+Same steps as dev, but:
+- Pushes image as `:latest` tag
+- Fetches `docker-compose.prod.yml` from `main` branch
+- Deploys to prod VPS at port `9000`
+- Spring profile set to `prd`
+
+### Required GitHub Secrets
+
+Go to **Settings → Secrets and variables → Actions → New repository secret** and add:
+
+| Secret Name | Value | Used In |
+|---|---|---|
+| `GHCR_TOKEN` | GitHub Personal Access Token (classic) with `read:packages` + `write:packages` scopes | Both workflows (push image to GHCR) |
+| `DEV_VPS_HOST` | Dev VPS IP address or hostname | dev workflow |
+| `DEV_VPS_USER` | SSH username for dev VPS (e.g. `ravidsun`) | dev workflow |
+| `DEV_VPS_SSH_KEY` | Private SSH key (multiline, Unix line endings) | dev workflow |
+| `DB_PASSWORD_DEV` | PostgreSQL password for dev database | dev workflow (passed to app) |
+| `PROD_VPS_HOST` | Prod VPS IP address or hostname | prod workflow |
+| `PROD_VPS_USER` | SSH username for prod VPS | prod workflow |
+| `PROD_VPS_SSH_KEY` | Private SSH key for prod VPS | prod workflow |
+| `DB_PASSWORD` | PostgreSQL password for prod database | prod workflow (passed to app) |
+
+### Required GitHub Variables
+
+Go to **Settings → Secrets and variables → Actions → Variables** and add:
+
+| Variable Name | Value | Used In |
+|---|---|---|
+| `DEV_DB_URL` | JDBC connection string (e.g. `jdbc:postgresql://72.60.201.76:5432/realnews-dev?sslmode=disable`) | dev workflow (passed to app) |
+| `PROD_DB_URL` | JDBC connection string for prod database | prod workflow (passed to app) |
+| `DEV_APP_HOST` | Hostname for Traefik routing (e.g. `dev-api.yourdomain.com` or leave empty for IP access) | dev workflow |
+| `PROD_APP_HOST` | Hostname for Traefik routing (e.g. `api.yourdomain.com`) | prod workflow |
+
+### VPS Firewall Configuration
+
+Open the required ports in **Hostinger control panel** → **VPS → Firewall**:
+
+| Protocol | Port | Source | Purpose |
+|---|---|---|---|
+| TCP | 22 | `0.0.0.0/0` | SSH access for deployments |
+| TCP | 8081 | `0.0.0.0/0` | Dev API access |
+| TCP | 9000 | `0.0.0.0/0` | Prod API access |
+
+### Accessing the Deployed Applications
+
+**Dev:**
+```bash
+curl http://72.60.201.76:8081/actuator/health
+curl http://72.60.201.76:8081/api/v1/articles
+curl http://72.60.201.76:8081/swagger-ui.html
+```
+
+**Prod:**
+```bash
+curl http://72.60.201.76:9000/actuator/health
+curl http://72.60.201.76:9000/api/v1/articles
+curl http://72.60.201.76:9000/swagger-ui.html
+```
+
+### Database Setup on VPS
+
+Before the first deployment, set up the PostgreSQL database:
+
+```bash
+# Connect to PostgreSQL on the VPS
+psql -h 127.0.0.1 -U postgres -d realnews-dev
+```
+
+Then create the app user and grant permissions:
+
+```sql
+-- Create app user
+CREATE USER realnewsuser WITH PASSWORD 'your_db_password';
+GRANT ALL PRIVILEGES ON DATABASE "realnews-dev" TO realnewsuser;
+GRANT ALL ON SCHEMA public TO realnewsuser;
+
+-- Grant on all existing tables (including flyway_schema_history)
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO realnewsuser;
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO realnewsuser;
+
+-- Make realnewsuser owner of flyway_schema_history
+ALTER TABLE public.flyway_schema_history OWNER TO realnewsuser;
+
+-- Default privileges for future objects
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO realnewsuser;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO realnewsuser;
+
+\q
+```
+
+### One-Time VPS Setup
+
+1. **Create the app directory:**
+   ```bash
+   mkdir -p /opt/real-newsletter
+   chown -R ravidsun:ravidsun /opt/real-newsletter
+   ```
+
+2. **Allow ravidsun to run Docker without sudo:**
+   ```bash
+   usermod -aG docker ravidsun
+   ```
+
+3. **Generate SSH key for ravidsun (if not already done):**
+   ```bash
+   sudo -u ravidsun ssh-keygen -t ed25519 -C "github-actions-deploy" -f /home/ravidsun/.ssh/id_ed25519 -N ""
+   cat /home/ravidsun/.ssh/id_ed25519.pub >> /home/ravidsun/.ssh/authorized_keys
+   ```
+
+   Copy the private key (`cat /home/ravidsun/.ssh/id_ed25519`) and add it as the `DEV_VPS_SSH_KEY` GitHub secret.
+
+### Verifying Deployments
+
+After pushing to `develop` or `main`, check the GitHub Actions run:
+
+1. Go to **Actions** in your GitHub repository
+2. Click the workflow run (deploy-prod or deploy)
+3. Check logs for any failures
+
+If deployment succeeds, access the app:
+
+```bash
+# Check container is running
+ssh ravidsun@72.60.201.76 "docker ps | grep real-newsletter"
+
+# Check app startup logs
+ssh ravidsun@72.60.201.76 "docker logs real-newsletter-app-1 --tail 50"
+
+# Test HTTP response
+curl http://72.60.201.76:8081/actuator/health  # dev
+curl http://72.60.201.76:9000/actuator/health  # prod
+```
+
+---
+
 
 ## Project Structure
 

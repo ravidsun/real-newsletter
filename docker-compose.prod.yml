@@ -15,8 +15,9 @@ services:
   app:
     image: ${APP_IMAGE}
     ports:
-      - "8081:8081"
+      - "9000:9000"
     environment:
+      SERVER_PORT: 9000
       DB_URL: ${DB_URL}
       DB_PASSWORD: ${DB_PASSWORD}
       SPRING_PROFILES_ACTIVE: prd
@@ -31,7 +32,7 @@ services:
       - "traefik.http.routers.real-newsletter-prod.entrypoints=https"
       - "traefik.http.routers.real-newsletter-prod.tls=true"
       - "traefik.http.routers.real-newsletter-prod.tls.certresolver=letsencrypt"
-      - "traefik.http.services.real-newsletter-prod.loadbalancer.server.port=8081"
+      - "traefik.http.services.real-newsletter-prod.loadbalancer.server.port=9000"
 
 networks:
   coolify:
