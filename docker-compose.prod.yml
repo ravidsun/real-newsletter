@@ -14,6 +14,7 @@
 services:
   app:
     image: ${APP_IMAGE}
+    pull_policy: always
     container_name: real-newsletter-prod
     ports:
       - "9000:9000"

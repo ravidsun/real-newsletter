@@ -14,6 +14,7 @@
 services:
   app:
     image: ${APP_IMAGE}
+    pull_policy: always
     container_name: real-newsletter-dev
     ports:
       - "8081:8081"
