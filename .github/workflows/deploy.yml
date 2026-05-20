@@ -89,6 +89,17 @@ jobs:
             set -e
             mkdir -p /opt/real-newsletter
             cd /opt/real-newsletter
+            
+            # Create .env file with all required variables
+            cat > .env << 'ENVEOF'
+            APP_IMAGE=ghcr.io/${{ github.repository }}:develop
+            DB_URL=${{ vars.DEV_DB_URL }}
+            DB_PASSWORD=${{ secrets.DB_PASSWORD_DEV }}
+            APP_HOST=${{ vars.DEV_APP_HOST }}
+            SERVER_PORT=8081
+            SPRING_PROFILES_ACTIVE=dev
+            ENVEOF
+            
             # Fetch latest compose file with auth (works for private repos)
             curl -fsSL \
               -H "Authorization: Bearer ${{ secrets.GHCR_TOKEN }}" \
@@ -96,10 +107,7 @@ jobs:
               "https://api.github.com/repos/${{ github.repository }}/contents/docker-compose.yml?ref=develop" \
               -o docker-compose.yml
             echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-            export APP_IMAGE=ghcr.io/${{ github.repository }}:develop
-            export DB_URL=${{ vars.DEV_DB_URL }}
-            export DB_PASSWORD=${{ secrets.DB_PASSWORD_DEV }}
-            export APP_HOST=${{ vars.DEV_APP_HOST }}
+            
             # Tear down existing containers to release port bindings
             docker compose -f docker-compose.yml down --remove-orphans || true
             # Kill any non-compose process still holding port 8081
