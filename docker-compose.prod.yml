@@ -14,6 +14,7 @@
 services:
   app:
     image: ${APP_IMAGE}
+    container_name: real-newsletter-prod
     ports:
       - "9000:9000"
     environment:
@@ -22,18 +23,17 @@ services:
       DB_PASSWORD: ${DB_PASSWORD}
       SPRING_PROFILES_ACTIVE: prd
     restart: unless-stopped
-    # Attach to coolify network only when APP_HOST / Traefik routing is needed.
-    # Comment the networks block out if Coolify is not installed.
-    networks:
-      - coolify
-    labels:
-      - "traefik.enable=${TRAEFIK_ENABLED:-false}"
-      - "traefik.http.routers.real-newsletter-prod.rule=Host(`${APP_HOST:-localhost}`)"
-      - "traefik.http.routers.real-newsletter-prod.entrypoints=https"
-      - "traefik.http.routers.real-newsletter-prod.tls=true"
-      - "traefik.http.routers.real-newsletter-prod.tls.certresolver=letsencrypt"
-      - "traefik.http.services.real-newsletter-prod.loadbalancer.server.port=9000"
+    # ── Optional: Uncomment networks below if you have Coolify/Traefik installed ──
+    # networks:
+    #   - coolify
+    # labels:
+    #   - "traefik.enable=${TRAEFIK_ENABLED:-false}"
+    #   - "traefik.http.routers.real-newsletter-prod.rule=Host(`${APP_HOST:-localhost}`)"
+    #   - "traefik.http.routers.real-newsletter-prod.entrypoints=https"
+    #   - "traefik.http.routers.real-newsletter-prod.tls=true"
+    #   - "traefik.http.routers.real-newsletter-prod.tls.certresolver=letsencrypt"
+    #   - "traefik.http.services.real-newsletter-prod.loadbalancer.server.port=9000"
 
-networks:
-  coolify:
-    external: true
+# networks:
+#   coolify:
+#     external: true

@@ -842,6 +842,7 @@ mvn test -Dtest=ArticleControllerTest
 ```
 
 Tests use an **H2 in-memory database** (profile `test`) — no Supabase connection required. Flyway is disabled in test mode; Hibernate creates the schema automatically from JPA entity metadata. Spring AI OpenAI autoconfiguration is excluded in the test profile to avoid external API dependencies.
+
 ### Test Coverage
 
 | Test Class | What Is Tested |

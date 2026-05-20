@@ -24,8 +24,9 @@ WORKDIR /app
 
 COPY --from=builder /workspace/target/real-newsletter-*.jar app.jar
 
-EXPOSE 8081
+EXPOSE 8081 9000
 
+# Default values - will be overridden by environment variables from docker-compose
 ENV SPRING_PROFILES_ACTIVE=dev
 ENV SERVER_PORT=8081
 
