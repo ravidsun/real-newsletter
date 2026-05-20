@@ -23,15 +23,21 @@ services:
       DB_PASSWORD: ${DB_PASSWORD}
       SPRING_PROFILES_ACTIVE: dev
     restart: unless-stopped
-    # ── Optional: Uncomment networks below if you have Coolify/Traefik installed ──
-    # networks:
-    #   - coolify
-    # labels:
-    #   - "traefik.enable=${TRAEFIK_ENABLED:-false}"
-    #   - "traefik.http.routers.real-newsletter-dev.rule=Host(`${APP_HOST:-localhost}`)"
-    #   - "traefik.http.routers.real-newsletter-dev.entrypoints=http"
-    #   - "traefik.http.services.real-newsletter-dev.loadbalancer.server.port=8081"
+    networks:
+      - default
+      # ── Optional: Uncomment below if you have Coolify/Traefik installed ──
+      # - coolify
+    labels:
+      # ── Optional: Uncomment below if you have Traefik installed ──
+      # - "traefik.enable=${TRAEFIK_ENABLED:-false}"
+      # - "traefik.http.routers.real-newsletter-dev.rule=Host(`${APP_HOST:-localhost}`)"
+      # - "traefik.http.routers.real-newsletter-dev.entrypoints=http"
+      # - "traefik.http.services.real-newsletter-dev.loadbalancer.server.port=8081"
+      - "description=Real Newsletter Dev"
 
-# networks:
-#   coolify:
-#     external: true
+networks:
+  default:
+    driver: bridge
+  # ── Optional: Uncomment below if you have Coolify/Traefik installed ──
+  # coolify:
+  #   external: true
