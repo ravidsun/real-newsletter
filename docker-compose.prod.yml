@@ -14,6 +14,7 @@
 services:
   app:
     image: ${APP_IMAGE}
+    pull_policy: always
     container_name: real-newsletter-prod
     ports:
       - "9000:9000"
@@ -23,17 +24,23 @@ services:
       DB_PASSWORD: ${DB_PASSWORD}
       SPRING_PROFILES_ACTIVE: prd
     restart: unless-stopped
-    # ── Optional: Uncomment networks below if you have Coolify/Traefik installed ──
-    # networks:
-    #   - coolify
-    # labels:
-    #   - "traefik.enable=${TRAEFIK_ENABLED:-false}"
-    #   - "traefik.http.routers.real-newsletter-prod.rule=Host(`${APP_HOST:-localhost}`)"
-    #   - "traefik.http.routers.real-newsletter-prod.entrypoints=https"
-    #   - "traefik.http.routers.real-newsletter-prod.tls=true"
-    #   - "traefik.http.routers.real-newsletter-prod.tls.certresolver=letsencrypt"
-    #   - "traefik.http.services.real-newsletter-prod.loadbalancer.server.port=9000"
+    networks:
+      - default
+      # ── Optional: Uncomment below if you have Coolify/Traefik installed ──
+      # - coolify
+    labels:
+      # ── Optional: Uncomment below if you have Traefik installed ──
+      # - "traefik.enable=${TRAEFIK_ENABLED:-false}"
+      # - "traefik.http.routers.real-newsletter-prod.rule=Host(`${APP_HOST:-localhost}`)"
+      # - "traefik.http.routers.real-newsletter-prod.entrypoints=https"
+      # - "traefik.http.routers.real-newsletter-prod.tls=true"
+      # - "traefik.http.routers.real-newsletter-prod.tls.certresolver=letsencrypt"
+      # - "traefik.http.services.real-newsletter-prod.loadbalancer.server.port=9000"
+      - "description=Real Newsletter Prod"
 
-# networks:
-#   coolify:
-#     external: true
+networks:
+  default:
+    driver: bridge
+  # ── Optional: Uncomment below if you have Coolify/Traefik installed ──
+  # coolify:
+  #   external: true

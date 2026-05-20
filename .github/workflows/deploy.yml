@@ -87,8 +87,8 @@ jobs:
           command_timeout: 10m
           script: |
             set -e
-            mkdir -p /opt/real-newsletter
-            cd /opt/real-newsletter
+            mkdir -p /opt/real-newsletter-dev
+            cd /opt/real-newsletter-dev
             
             # Create .env file with all required variables
             cat > .env << 'ENVEOF'
@@ -118,7 +118,7 @@ jobs:
             docker compose -f docker-compose.yml pull
             docker compose -f docker-compose.yml up -d || {
               echo "=== docker compose up failed — app container logs ==="
-              docker logs real-newsletter-app-1 2>&1 || true
+              docker logs real-newsletter-dev 2>&1 || true
               exit 1
             }
             docker image prune -f
